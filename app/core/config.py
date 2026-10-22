@@ -87,7 +87,7 @@ class Settings(BaseSettings):
 
     @staticmethod
     def repository_root() -> Path:
-        return Path(__file__).resolve().parents[4]
+        return Path(__file__).resolve().parents[2]
 
     @model_validator(mode="after")
     def validate_database_configuration(self) -> Settings:

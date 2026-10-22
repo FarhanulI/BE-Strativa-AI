@@ -2,7 +2,7 @@
 
 ## Safe Local Setup
 
-Use Python 3.12 and `uv sync --project apps/api --python 3.12`. Dependencies must be installed before running scripts with plain Python. Never print, commit, or paste connection strings into logs.
+Use Python 3.12 and `uv sync --python 3.12`. Dependencies must be installed before running scripts with plain Python. Never print, commit, or paste connection strings into logs.
 
 Configure repository-root `.env.test.local` using `.env.example`: explicitly set `APP_ENV=test` and `NEON_BRANCH_NAME=test`; supply the dedicated test branch's pooled `DATABASE_URL` and direct `DATABASE_URL_DIRECT` or `DATABASE_URL_UNPOOLED`. Both aliases, if populated, must be identical. Set a real `REDIS_URL` for worker/demo verification. Keep dev credentials in `.env.local` with dev/dev selectors. Prefer `APP_ENV=test` in the invoking process to select the test file unambiguously.
 
@@ -16,24 +16,24 @@ Run from the repository root. The following `uv` commands are the equivalents of
 
 | Just Target | Equivalent Command |
 | --- | --- |
-| `check` | `uv run --project apps/api --python 3.12 --no-sync python apps/api/scripts/check.py` |
-| `migrate` | `uv run --project apps/api --python 3.12 --no-sync python apps/api/scripts/migrate.py upgrade` |
-| `migrate-test` | `APP_ENV=test uv run --project apps/api --python 3.12 --no-sync python apps/api/scripts/migrate.py upgrade --require-test` |
-| `test-db` | `APP_ENV=test uv run --project apps/api --python 3.12 --no-sync python apps/api/scripts/test_db.py -q` |
-| `openapi` | `uv run --project apps/api --python 3.12 --no-sync python apps/api/scripts/generate_openapi.py` |
+| `check` | `uv run --python 3.12 --no-sync python scripts/check.py` |
+| `migrate` | `uv run --python 3.12 --no-sync python scripts/migrate.py upgrade` |
+| `migrate-test` | `APP_ENV=test uv run --python 3.12 --no-sync python scripts/migrate.py upgrade --require-test` |
+| `test-db` | `APP_ENV=test uv run --python 3.12 --no-sync python scripts/test_db.py -q` |
+| `openapi` | `uv run --python 3.12 --no-sync python scripts/generate_openapi.py` |
 
-With the API virtual environment activated, omit the `uv run ...` prefix and use `python apps/api/scripts/<script>.py` with the same arguments. The runners resolve their own package paths. Bash prefixes are shown; in PowerShell set `$env:APP_ENV = 'test'` before invoking the command.
+With the API virtual environment activated, omit the `uv run ...` prefix and use `python scripts/<script>.py` with the same arguments. The runners resolve their own package paths. Bash prefixes are shown; in PowerShell set `$env:APP_ENV = 'test'` before invoking the command.
 
 Run the reversible live test cycle before integration tests (this deletes test foundation state):
 
 ```bash
-APP_ENV=test uv run --project apps/api --no-sync python apps/api/scripts/migrate.py upgrade --require-test
-APP_ENV=test uv run --project apps/api --no-sync python apps/api/scripts/migrate.py downgrade --require-test
-APP_ENV=test uv run --project apps/api --no-sync python apps/api/scripts/migrate.py upgrade --require-test
-APP_ENV=test uv run --project apps/api --no-sync python apps/api/scripts/migrate.py check --require-test
-APP_ENV=test uv run --project apps/api --no-sync python apps/api/scripts/test_db.py -q
-APP_ENV=test uv run --project apps/api --no-sync python apps/api/scripts/demo_ping.py
-APP_ENV=test uv run --project apps/api --no-sync python apps/api/scripts/verify_phase0.py
+APP_ENV=test uv run --no-sync python scripts/migrate.py upgrade --require-test
+APP_ENV=test uv run --no-sync python scripts/migrate.py downgrade --require-test
+APP_ENV=test uv run --no-sync python scripts/migrate.py upgrade --require-test
+APP_ENV=test uv run --no-sync python scripts/migrate.py check --require-test
+APP_ENV=test uv run --no-sync python scripts/test_db.py -q
+APP_ENV=test uv run --no-sync python scripts/demo_ping.py
+APP_ENV=test uv run --no-sync python scripts/verify_phase0.py
 ```
 
 The demo commits producer audit state and an outbox event in one transaction, relays through real Redis, and consumes the exact event twice using the same consumer group. It requires two acknowledged deliveries, exactly one processed-event record, and exactly two audit rows (producer plus consumer). It uses/deletes a unique Redis stream and retains correlated DB evidence; repeat runs use new event IDs. It is an integration script, not a new HTTP endpoint.
