@@ -19,6 +19,7 @@ from app.api_contract.readiness import (
 )
 from app.auth import register_routes as register_auth_routes
 from app.core import (
+    ConfigurationError,
     Conflict,
     CursorPage,
     CursorParams,
@@ -64,6 +65,18 @@ DOMAIN_ERROR_RESPONSES = {
 }
 
 
+CONFIGURATION_ERROR_STATUS = 503
+CONFIGURATION_ERROR_CODE = "service_unavailable"
+CONFIGURATION_ERROR_TITLE = "Service Unavailable"
+CONFIGURATION_ERROR_DETAIL = "A required service is temporarily unavailable"
+CONFIGURATION_ERROR_RESPONSE = {
+    "description": CONFIGURATION_ERROR_TITLE,
+    "content": {
+        "application/problem+json": {"schema": {"$ref": "#/components/schemas/ProblemDetails"}}
+    },
+}
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -88,6 +101,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.settings = app_settings
+    app.add_exception_handler(ConfigurationError, _configuration_error_handler)
     app.add_exception_handler(DomainError, _api_domain_error_handler)
     app.add_exception_handler(RequestValidationError, _request_validation_error_handler)
     app.add_exception_handler(Exception, _unhandled_error_handler)
@@ -191,6 +205,10 @@ def create_app(
                                 )
                                 continue
                             operation["responses"][status_key] = response
+                        # Routes that declare their own 503 (e.g. /readyz) keep it.
+                        operation["responses"].setdefault(
+                            str(CONFIGURATION_ERROR_STATUS), CONFIGURATION_ERROR_RESPONSE
+                        )
             app.openapi_schema = schema
         return app.openapi_schema
 
@@ -224,6 +242,36 @@ async def _api_domain_error_handler(request: Request, error: DomainError) -> JSO
     )
     return JSONResponse(
         status_code=error.status_code,
+        content=problem.model_dump(exclude_none=True),
+        media_type="application/problem+json",
+    )
+
+
+async def _configuration_error_handler(
+    request: Request, error: ConfigurationError
+) -> JSONResponse:
+    correlation_fields = problem_correlation_fields(
+        request_id_header=request.headers.get("x-request-id"),
+        traceparent=request.headers.get("traceparent"),
+    )
+    # ConfigurationError messages name settings, never their values.
+    structlog.get_logger().error(
+        "configuration_error",
+        method=request.method,
+        path=_route_template(request),
+        reason=str(error),
+        **correlation_fields,
+    )
+    problem = ProblemDetails(
+        title=CONFIGURATION_ERROR_TITLE,
+        status=CONFIGURATION_ERROR_STATUS,
+        detail=CONFIGURATION_ERROR_DETAIL,
+        instance=_route_template(request),
+        code=CONFIGURATION_ERROR_CODE,
+        **correlation_fields,
+    )
+    return JSONResponse(
+        status_code=CONFIGURATION_ERROR_STATUS,
         content=problem.model_dump(exclude_none=True),
         media_type="application/problem+json",
     )

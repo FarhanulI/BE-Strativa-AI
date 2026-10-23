@@ -280,3 +280,51 @@ async def test_readiness_returns_503_when_database_is_unavailable() -> None:
         "database": "unavailable",
         "redis": "unavailable",
     }
+
+@pytest.mark.asyncio
+async def test_login_without_redis_fails_closed_with_generic_503_problem() -> None:
+    async def fake_session():
+        yield object()
+
+    app = create_app(Settings(_env_file=None))
+    app.dependency_overrides[database_session] = fake_session
+    with structlog.testing.capture_logs() as logs:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/v1/auth/login",
+                json={"email": "person@example.test", "password": "correct horse battery"},
+                headers={
+                    "X-Request-ID": "request-config-1",
+                    "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
+                },
+            )
+
+    assert response.status_code == 503
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert "retry-after" not in response.headers
+    body = response.json()
+    assert body["status"] == 503
+    assert body["title"] == "Service Unavailable"
+    assert body["code"] == "service_unavailable"
+    assert body["detail"] == "A required service is temporarily unavailable"
+    assert body["request_id"] == "request-config-1"
+    assert body["trace_id"] == "0123456789abcdef0123456789abcdef"
+    assert "REDIS" not in response.text.upper()
+    assert "_URL" not in response.text
+    entry = next(log for log in logs if log["event"] == "configuration_error")
+    assert entry["log_level"] == "error"
+    assert entry["request_id"] == "request-config-1"
+    assert entry["trace_id"] == "0123456789abcdef0123456789abcdef"
+    assert "REDIS_URL" in entry["reason"]
+
+
+def test_openapi_declares_shared_503_without_replacing_readyz() -> None:
+    schema = create_app(Settings(_env_file=None)).openapi()
+    login_503 = schema["paths"]["/api/v1/auth/login"]["post"]["responses"]["503"]
+    assert login_503["content"]["application/problem+json"]["schema"]["$ref"] == (
+        "#/components/schemas/ProblemDetails"
+    )
+    readyz_503 = schema["paths"]["/readyz"]["get"]["responses"]["503"]
+    assert "ReadinessResponse" in str(readyz_503)
