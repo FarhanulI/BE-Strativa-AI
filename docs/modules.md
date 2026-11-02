@@ -22,7 +22,7 @@ Rules:
 - profile: ContentProfile (all profile types), ProfileIdentity, optional BusinessContext, maturity stage; [spec](specs/profile/spec.md)
 
 ### Phase 2 — AI & Knowledge Platform
-- ai_platform: AI Orchestrator, AI Router, provider abstraction (LiteLLM), task vs capability registry, strict output-schema enforcement, token cost accounting, multimodal-ready interfaces
+- ai_platform: AI Orchestrator, AI Router, provider abstraction (LiteLLM), task vs capability registry, strict output-schema enforcement, token cost accounting, multimodal-ready interfaces; [spec](specs/ai-platform/spec.md)
 - rag: KnowledgeChunk (GLOBAL/WORKSPACE/PROFILE scope), async embedding pipeline, hybrid retrieval (pgvector + tsvector + SQL + temporal), ranking, lineage
 - context_engine: task-specific context requirements, token budgeting, freshness, source priority, global vs tenant scope
 
