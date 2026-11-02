@@ -1,8 +1,8 @@
 # AI Platform Module Specification
 
-Status: reviewed; decisions applied (rev 2); awaiting final owner approval. Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. It is a new specification, not a restoration of any earlier `ai_platform` spec.
+Status: reviewed; decisions applied (rev 3); awaiting final owner approval. Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec.
 
-Items marked **(provisional — OQ-n)** use a working value so that the spec stays testable. The value is not a decision. See section 19. Acceptance criteria that depend on a provisional value say so. Section 20 lists the decided items and the one prerequisite task (P-2).
+No provisional markers remain in rev 3, and section 19 has no open questions. Section 20 lists the decided items, the one prerequisite task (P-2), the operational prerequisites and the implementation inputs.
 
 ## Backend
 
@@ -76,7 +76,7 @@ It does not build context (that is `context_engine`), retrieve knowledge (`rag`)
 - Non-persistent contracts:
   - `AiTaskDefinition`, `AiTaskRegistry`, `AiCapability`, `AiModality`, and the quality/latency/cost classes.
   - `OutputSchemaRegistry`.
-  - `ModelCatalog` (in-repo versioned data: models, capabilities, modalities, quality tier, context window, price per unit, latency estimate, billing mode).
+  - `ModelCatalog` (in-repo versioned data: models, capabilities, modalities, quality tier, context window, price per unit, latency estimate).
   - `AiRouter`, `AiOrchestrator`, `EmbeddingService`, `ProviderClient` (internal).
   - `AiCallContext`, `AiTaskRequest`, `AiTaskResult`.
   - `AiPlatformConfig` (environment-driven budget limits and retention, 5.5, 12.3).
@@ -161,7 +161,7 @@ Indexes:
 | `model` | text not null | catalog model id |
 | `catalog_version` | text not null | |
 | `price_version` | text not null | |
-| `billing_mode` | text not null | `free_tier` \| `paid`, copied from the catalog entry used (10.1). All calls of one request have the same value (INV-29). |
+| `billing_mode` | text not null | `free_tier` \| `paid`, derived at call time from the provider's configuration (10.1), not from the catalog. All calls of one request have the same value (INV-29). |
 | `routing_version` | text not null | |
 | `route_rank` | int not null | 1 = the Router's first choice |
 | `candidate_snapshot` | jsonb not null | ordered list of `{model, eligible, reason_code}` (ids and codes only, no content) |
@@ -170,7 +170,7 @@ Indexes:
 | `finish_reason` | text null | `stop` \| `length` \| `content_filter` \| other provider value |
 | `input_units`, `output_units` | bigint null | null until settled |
 | `reserved_micro_usd` | bigint not null | amount reserved against the call's one budget row |
-| `cost_micro_usd` | bigint not null default 0 | settled actual cost |
+| `cost_micro_usd` | bigint not null default 0 | **metered cost** at the catalog list price (12.2), for both billing modes. It is the application's accounting figure for budgets and the test spend guards, **not** the provider's invoice: a free-tier call may be invoiced 0. For an `abandoned` record it equals `reserved_micro_usd` (8.2). |
 | `schema_valid` | boolean null | null for `embedding` and for calls that did not reach validation |
 | `validation_error_count` | int null | |
 | `validation_error_types` | jsonb null | Pydantic error type names only (for example `missing`), never values or text |
@@ -288,6 +288,7 @@ The `AiCallContext` constructors are the only way to build a context. The budget
 - `from_workspace` accepts a `WorkspaceContext` that came from `require_workspace_permission` or `WorkspaceAccessService.authorize`. A bare `workspace_id` taken from client input is never accepted. The call is **workspace scope** and uses the workspace budget.
 - `for_worker` is for workers and event handlers. Its `workspace_id` is required and must come from persisted data (an event envelope or a DB row), never from client input. The call is always workspace scope. `None` is rejected, so a worker cannot reach system scope through this constructor.
 - `system` is for platform work with no workspace. The call is **system scope** and uses the system budget. It may be used only for `EMBED_TEXT` (D-15, section 9). Only code under `app/ai_platform/` and `app/rag/` may construct a system context. An architecture test rejects any other module that calls `AiCallContext.system` or constructs `AiCallContext` directly (INV-31).
+- **Identifier types at the boundary.** `RequestContext` carries `user_id` and `workspace_id` as `str`, while `WorkspaceContext` uses `UUID`. `AiCallContext` uses `UUID`. The conversion happens only at the construction boundary: `from_workspace` takes the already-verified `WorkspaceContext` (UUIDs), and `for_worker` receives UUIDs read from persisted rows or event envelopes. Raw `str` identifiers from a `RequestContext` are never passed to `AiCallContext`.
 
 ### 5.2 Orchestrator
 
@@ -423,7 +424,7 @@ def register_routes(app) -> None: ...
 - A domain module registers the output schema it owns with `OutputSchemaRegistry.register(...)` at startup. This is how a task becomes ready. `AiTaskRegistry` is owned by `ai_platform`.
 - `check_ai_providers` (D-13) is a presence-only readiness helper in the style of `check_database`/`check_redis`. It never calls a provider, performs no network access and reveals no key material. `capability="embedding"` is `ok` only when the OpenAI key is present. `capability="generation"` is `ok` when at least one enabled catalog provider with a generation-capable model has its key present (today only Gemini). `rag` may call it at startup. `ai_platform` itself never fails at startup for a missing key.
 - Provider API keys are read as `SecretStr` from LiteLLM's conventional environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`).
-- `AiPlatformConfig` (`pydantic-settings`, env prefix `AI_`, owned by `ai_platform`, not core `Settings`) holds the budget limits (12.3), the content retention (8.3) and the job tuning values. `build_ai_platform` builds it from the environment when none is passed and raises `ConfigurationError` on an invalid value.
+- `AiPlatformConfig` (`pydantic-settings`, env prefix `AI_`, owned by `ai_platform`, not core `Settings`) holds the budget limits (12.3), the content retention (8.3), the per-provider billing mode (`AI_GEMINI_BILLING_MODE`, 10.1) and the job tuning values. `build_ai_platform` builds it from the environment when none is passed and raises `ConfigurationError` on an invalid value.
 - `FakeAiProvider` and `ScriptedResponse` are exported from the package root for other modules' tests (the boundary test forbids `app.ai_platform.testing`-style deep imports). The fake records the exact provider request it received so tests can assert its shape (11.1).
 
 ### 5.6 What is NOT exposed
@@ -463,15 +464,17 @@ It exposes two **read-only** endpoints so that workspace OWNER/ADMIN can see the
 - `reserved_micro_usd`
 - `remaining_micro_usd` (`max(0, limit - spent - reserved)`)
 - `percent_used` (integer, `floor(100 * spent / limit)`, settled spend only)
-- `state`: `exhausted` if `spent >= limit` or the row's `exhausted_notified_at` is set (at least one call was refused this period); else `warning` if `spent * 100 >= 80 * limit`; else `ok`
+- `state` (D-18), computed from the current configured limit and the current counters only: `exhausted` when `spent + reserved >= limit`; else `warning` when `spent * 100 >= 80 * limit`; else `ok`. The notification flags `warning_notified_at` and `exhausted_notified_at` do not take part in it.
 
-`limit_micro_usd` is the current configured workspace limit for the current period (D-9) and the row's stored limit for past periods. A workspace with no row yet this month reports the configured limit and zero counters. The `state` rule after a mid-month limit raise is provisional — OQ-4.
+`limit_micro_usd` is the current configured workspace limit for the current period (D-9) and the row's stored limit for past periods. A workspace with no row yet this month reports the configured limit and zero counters. After a mid-month limit change `state` follows the new limit at once (for example it returns from `exhausted` to `ok` after a raise), while the notification flags stay set (D-18).
 
 `GET /usage` response `AiUsageReport`:
 
 - `period_start`
 - `totals` (`call_count`, `failed_call_count`, `input_units`, `output_units`, `cost_micro_usd`)
 - `groups`: a list of `{key, call_count, failed_call_count, input_units, output_units, cost_micro_usd}`
+
+`cost_micro_usd` in `totals` and `groups` is the **metered cost** at the catalog list price (12.2). It is the application's accounting figure, not the provider's invoice: a free-tier call may be invoiced 0.
 
 Groups are bounded (task ≤ 9, model ≤ catalog size, day ≤ 31), so there is no cursor. Both endpoints:
 
@@ -542,7 +545,7 @@ Handlers are registered with `JobRegistry.register(job_type, version, handler)`.
     - If `attempt_count < 5`, the reaper re-enqueues `execute_request`.
     - Otherwise it marks the request `failed` with `error_code = execution_abandoned` and emits `ai.request_failed`. That update is conditioned on the `lease_epoch` and `lease_expires_at` the reaper read, so it cannot overwrite a newer claim.
   - `queued` requests older than 5 minutes: re-enqueue `execute_request`. This is a backstop for a lost job message.
-  - Stale `reserved` usage records are marked `abandoned`. The amount reserved is **charged to `spent` as the cost** (never undercount) and the reservation is released (INV-14). The settlement flip is `WHERE status = 'reserved'`, so a record is abandoned at most once. The age thresholds are chosen so that no live call can still hold the record, because every call is bounded by its request deadline (at most 300 s):
+  - Stale `reserved` usage records are marked `abandoned`. In **one statement** (a data-modifying CTE) the record is flipped `reserved → abandoned` with `cost_micro_usd = reserved_micro_usd` and `finished_at = :now`, the same amount is added to the budget row's `spent` (never undercount) and the reservation is released (INV-14). The usage row and the budget row therefore change together, and the reconciliation invariant (INV-13) holds after every reap. The settlement flip is `WHERE status = 'reserved'`, so a record is abandoned at most once. The age thresholds are chosen so that no live call can still hold the record, because every call is bounded by its request deadline (at most 300 s):
     - **Async requests:** reserved for more than 360 s (2 × the lease). The condition does not depend on the request's lease, so it also covers the record of a fenced worker (8.1) whose request is now owned by a newer claim.
     - **Sync requests (I):** the request has `mode = 'sync'` and no lease. The record is reserved for more than `sync_stale_after` = 420 s (the longest latency-class deadline, 300 s, plus a 120 s margin). Config validation rejects any value that is not greater than the longest deadline. The same job also marks the sync request itself (still `running` for more than `sync_stale_after`) `failed` with `error_code = execution_abandoned`, with no event.
 - **Triggering:** by the cron CLI (8.5) once per minute. Handlers are called directly in tests.
@@ -640,8 +643,9 @@ The Router is a pure, deterministic function of `(task definition, request, cata
 
 - Versioned in-repo data (`catalog_version`, `price_version`).
 - Chat provider: **Gemini**, through LiteLLM (D-4). **OpenAI** is used only for `text-embedding-3-small` (1024 dimensions, `v1-d1024`). No OpenAI chat model and no Anthropic adapter is enabled. The catalog format and the adapter mapping accept further providers and models later, as a change inside `ai_platform` only, with no change to domain modules or to `AiTaskRequest`. With a single enabled chat provider, fallback happens only between enabled Gemini models of the same billing mode. If only one model is eligible there is no fallback.
-- Each model has: `provider`, `model`, `enabled`, `capabilities`, `input_modalities`, `output_modalities`, `quality_tier`, `context_window_units`, `max_output_units`, `supports_json_schema`, `latency_p50_ms` (static estimate), and integer prices `input_micro_usd_per_million_units` and `output_micro_usd_per_million_units`, plus `price_source_url` and `price_checked_on` (date), and `billing_mode`: `free_tier` or `paid`.
-- **Prices are not written in this spec.** They are stored in the in-repo catalog under a `price_version`. They are *to be filled at implementation, with source URL and date*, and must be verified against each provider's official pricing page at that time. Free-tier quotas and limits are not written here either. Which specific Gemini models fill each quality tier is OQ-1. Tests use a synthetic fake catalog with synthetic prices.
+- Each model has: `provider`, `model`, `enabled`, `capabilities`, `input_modalities`, `output_modalities`, `quality_tier`, `context_window_units`, `max_output_units`, `supports_json_schema`, `latency_p50_ms` (static estimate), and integer prices `input_micro_usd_per_million_units` and `output_micro_usd_per_million_units`, plus `price_source_url` and `price_checked_on` (date). The catalog keeps capabilities, tiers, limits and list prices. It has **no** billing-mode field.
+- **Billing mode is a property of the provider credential, not of the model (D-19).** It is configured per provider in `AiPlatformConfig`: `AI_GEMINI_BILLING_MODE` = `free_tier` or `paid` (default `free_tier`). The OpenAI embedding credential is always `paid` and is not configurable. A value other than `free_tier` or `paid` raises `ConfigurationError` when the config is built. The Router derives each candidate's `billing_mode` from its provider's configuration, so the same model is `free_tier` or `paid` purely by configuration. Tests set modes for fake providers through the `config` argument of `build_ai_platform`.
+- **Prices are not written in this spec.** They are stored in the in-repo catalog under a `price_version`. They are *to be filled at implementation, with source URL and date*, and must be verified against each provider's official pricing page at that time. Free-tier quotas and limits are not written here either. Which specific Gemini models fill each quality tier is an implementation input (20.4). Tests use a synthetic fake catalog with synthetic prices.
 - The catalog file, the provider adapter and the module configuration are the only places in the codebase that may contain provider or model identifiers (INV-3).
 - Provider API keys are read from environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`) as `SecretStr` and are never logged.
 
@@ -658,7 +662,7 @@ The Router is a pure, deterministic function of `(task definition, request, cata
    - `interactive`: (`latency_p50_ms` asc, estimated cost asc, `model` asc)
    - `standard`: (estimated cost asc, `latency_p50_ms` asc, `model` asc)
    - `batch`: (estimated cost asc, `model` asc)
-9. **Billing-mode lock.** Keep only candidates whose `billing_mode` equals that of the first-ranked candidate. The rest get reason code `billing_mode`. The request never uses a candidate of the other billing mode, so a `free_tier` request never falls back to a `paid` candidate, and the reverse (INV-29).
+9. **Billing-mode lock.** Keep only candidates whose `billing_mode` (derived from the provider's configuration, 10.1) equals that of the first-ranked candidate. The rest get reason code `billing_mode`. The request never uses a candidate of the other billing mode, so a `free_tier` request never falls back to a `paid` candidate, and the reverse (INV-29).
 10. If no candidate remains and the cause was not budget, context or missing provider keys, raise `AiNoRoute`. For embeddings the candidate list is exactly the pinned model, or `AiNoRoute` if it is unavailable.
 
 Quality is a floor, not an objective. Among eligible models the cheapest (or, for `interactive`, the fastest) wins. This keeps selection simple and predictable (§62).
@@ -746,14 +750,14 @@ Every provider call attempt writes exactly one `ai_usage_records` row (section 4
 | Call returned but invalid output | `failed` (`output_invalid` / `output_truncated`) | provider-reported units × price (the provider charged) |
 | Provider error with reported usage | `failed` | reported units × price |
 | Provider error without usage (timeout, connection, 5xx) | `failed` | 0 |
-| Process died before settlement | `abandoned` (by the reaper) | the reserved estimate (conservative) |
+| Process died before settlement | `abandoned` (by the reaper) | the reserved estimate (conservative), stored as `cost_micro_usd = reserved_micro_usd` |
 
-Units come from the provider response and are mapped to `input_units` and `output_units` at the adapter boundary. If a successful response has no usage, the adapter falls back to LiteLLM's counter on the request and response and flags this in the structured log with `usage_source="estimated"`. The per-request totals on `ai_requests` are the sums over its settled records.
+Units come from the provider response and are mapped to `input_units` and `output_units` at the adapter boundary. If a successful response has no usage, the adapter falls back to LiteLLM's counter on the request and response and flags this in the structured log with `usage_source="estimated"`. The per-request totals on `ai_requests` are the sums over its settled records. An abandoned record is settled by the reaper in one statement that sets `cost_micro_usd = reserved_micro_usd` and `finished_at`, adds that amount to `spent` and releases the reservation (8.2), so INV-13 holds after a reap.
 
 ### 12.2 Cost computation
 
 - Costs are integers: `cost = ceil(units × price_per_million / 1_000_000)` for input and output separately, then summed. Rounding up means the ledger never undercounts.
-- Catalog prices are the authority, versioned with `price_version` (D-4). LiteLLM's cost helper is not used for money. `billing_mode` does not change the computation: the catalog price of the model is used either way.
+- Catalog prices are the authority, versioned with `price_version` (D-4). LiteLLM's cost helper is not used for money. `billing_mode` does not change the computation: `cost_micro_usd` is the **metered cost at the catalog list price for both billing modes**. It is the application's accounting figure, used for budgets and for the 2 USD and 20 USD test guards. It is **not** the provider's invoice: a free-tier call may be invoiced 0.
 - **Reservation estimate** for a generation call = `ceil(estimated_input_units × in_price / 1e6) + ceil(max_output_units × out_price / 1e6)`. `max_output_units` is the lower of the request's value, the task default and the model's maximum. Embedding estimate = `ceil(estimated_input_units × in_price / 1e6)`.
 
 ### 12.3 Budgets
@@ -789,7 +793,7 @@ If actual cost exceeds the reserved estimate, which should not happen because th
 | Refusal (no exemptions, D-8) | A reservation is refused when `spent + reserved + est > :limit` (the statement in step 2). This applies to every call, in both scopes, with no exemptions. The first refusal for a budget row in a period publishes `ai.budget_exhausted` once (step 4). Because reservations use worst-case estimates, this can happen **before settled `spent` reaches exactly 100 %** of the limit (F-3). Calls already in flight finish and settle. |
 
 - Refusals write no `ai_usage_records` row, because no call was made. They are counted in a structured log event (`ai_budget_refused`) with scope, task and period only.
-- The notification flags are not reset by a limit change. That is provisional (OQ-4).
+- The notification flags (`warning_notified_at`, `exhausted_notified_at`) are never reset, including by a limit change. They only control event publication (D-18). `GET /budget` `state` does not use them (section 6).
 
 **Reconciliation.** For any period row with `reserved_micro_usd = 0`, `spent_micro_usd` equals the sum of `cost_micro_usd` over `ai_usage_records` of that scope, workspace and period (INV-13). The `ai_platform.reconcile_budgets` job (8.4) checks this in production and reports a mismatch without repairing it. The test suite includes the same check (AC-36).
 
@@ -910,7 +914,7 @@ Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container
 6. **AC-6.** Every `ai.*` event model is registered once in `DEFAULT_EVENT_REGISTRY`, forbids extra fields, and no field name matches `token`. `publish` accepts each of them (INV-18).
 7. **AC-7.** Settings and config validation:
    - `Settings(embedding_dim=1024)` is accepted, any other positive `embedding_dim` makes `build_ai_platform` raise `ConfigurationError`, and an unset value is accepted.
-   - `AiPlatformConfig` defaults are workspace limit 25,000,000 micro-USD, system limit 100,000,000 micro-USD and retention 30 days. The conversion uses `Decimal` (for example `AI_WORKSPACE_MONTHLY_BUDGET_USD=12.345678` gives 12,345,678). Negative, non-numeric, non-finite and more-than-6-decimal values raise `ConfigurationError`. `sync_stale_after` not greater than the longest latency deadline raises `ConfigurationError`.
+   - `AiPlatformConfig` defaults are workspace limit 25,000,000 micro-USD, system limit 100,000,000 micro-USD, retention 30 days and `AI_GEMINI_BILLING_MODE` `free_tier`. The conversion uses `Decimal` (for example `AI_WORKSPACE_MONTHLY_BUDGET_USD=12.345678` gives 12,345,678). Negative, non-numeric, non-finite and more-than-6-decimal values raise `ConfigurationError`. `sync_stale_after` not greater than the longest latency deadline raises `ConfigurationError`.
    - Provider key values never appear in `repr`, logs or errors.
 8. **AC-8.** Missing provider keys (D-13). `build_ai_platform` succeeds with no keys.
    - With the OpenAI key absent, `embed_texts` raises `AiProviderNotConfigured` (a `ConfigurationError`) at call time.
@@ -928,11 +932,13 @@ Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container
 14. **AC-14.** Ranking follows 10.2 step 8 for each latency class, with deterministic tie-breaks. The same inputs produce byte-identical `candidate_snapshot` across runs (INV-5).
 15. **AC-15.** If the first candidate times out or returns 5xx or rate-limited, the call falls back to the next candidate. The ledger has one `failed` row for the first candidate and a `succeeded` row for the second, with correct `route_rank`.
 16. **AC-16.** Error classification (E-3). A parametrized test drives the fake provider through each row of the table in 10.3 (timeout, connection error, 5xx, rate limit or quota, auth failure, bad request, content refusal, truncation, invalid output, missing credentials). For each, it asserts the persisted `error_code`, whether a fallback happens, the raised error, and the bound on attempts. Bad request and content refusal make exactly one attempt. A missing-credentials call makes zero attempts and writes no usage row.
-17. **AC-17.** Billing mode (C, INV-29). With a fake catalog holding `free_tier` models A and B and a `paid` model C, all eligible:
+17. **AC-17.** Billing mode (C, INV-29). With a fake catalog whose entries have no billing-mode field, holding models A and B of fake provider P1 and model C of fake provider P2 (all eligible), and a test configuration that sets P1 to `free_tier` and P2 to `paid`:
     - when A returns a quota-exhausted response (`provider_rate_limited`), the call falls back to B and never to C;
     - when A and B both fail, `AiProviderUnavailable` is raised, C is never called, and no `ai_usage_records` row has `billing_mode='paid'`;
     - with the candidate order reversed so a `paid` model ranks first, the request never falls back to a `free_tier` model;
-    - the excluded candidates carry reason code `billing_mode` in `candidate_snapshot`, and all rows of one request share one `billing_mode`.
+    - the excluded candidates carry reason code `billing_mode` in `candidate_snapshot`, and all rows of one request share one `billing_mode`;
+    - the same model, with its provider's configured mode flipped between `free_tier` and `paid`, is treated as `free_tier` or `paid` purely by configuration, and the rows record that mode;
+    - a billing-mode value other than `free_tier` or `paid` (for example `AI_GEMINI_BILLING_MODE=trial`) raises `ConfigurationError` when the config is built, and the default is `free_tier`.
 18. **AC-18.** A `content_refused` outcome is not retried on another model. `AiContentRefused` is raised.
 19. **AC-19.** Fallback is bounded at `max_provider_attempts` distinct models. When all fail, `AiProviderUnavailable` is raised and the request is `failed`.
 20. **AC-20.** The circuit breaker opens after 5 consecutive failures in 60 s, closes via a half-open probe, and is driven only by `FakeClock`.
@@ -954,7 +960,7 @@ Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container
 
 ### 17.4 Cost and budget (Postgres)
 
-29. **AC-29.** After a successful call, `ai_usage_records` has one row with units, integer micro-USD cost equal to the independently computed `ceil` formula, `price_version`, `billing_mode`, route fields and `period_start`. `ai_requests` totals equal the sum of its rows.
+29. **AC-29.** After a successful call, `ai_usage_records` has one row with units, integer micro-USD cost equal to the independently computed `ceil` formula, `price_version`, `billing_mode`, route fields and `period_start`. `ai_requests` totals equal the sum of its rows. The cost is the metered cost at the catalog list price for both billing modes: a call through a provider configured `free_tier` records the same formula-based nonzero `cost_micro_usd` as the same call configured `paid`, and the test asserts that the figure is the application's metered cost, not an invoice.
 30. **AC-30.** Concurrency: with a workspace limit that allows exactly K calls and N ≫ K concurrent callers using separate committed sessions, exactly K succeed, N−K raise `AiBudgetExceeded`, and `reserved + spent ≤ limit` at all times (INV-10).
 31. **AC-31.** Budget separation (D-1, INV-11). With workspaces A and B and the system budget all having room:
     - a burst of workspace-scope calls for A changes only A's budget row, and B's row and the system row are byte-identical before and after;
@@ -966,11 +972,12 @@ Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container
     - lowering the configured limit to L2 below `spent + reserved`: the in-flight call still settles normally (its reservation is not invalidated), and the next reservation is refused using L2 immediately;
     - raising the configured limit to L3: the next reservation that L2 would have refused is admitted immediately;
     - after each reservation or refusal the row's `limit_micro_usd` equals the last limit passed, and the decision never uses the stored value;
-    - the 80 % evaluation at settlement uses the limit passed with the settlement.
+    - the 80 % evaluation at settlement uses the limit passed with the settlement;
+    - the notification flags are never reset by the change (D-18): after a raise, a previously set `exhausted_notified_at` stays set and a second refusal publishes nothing more; `GET /budget` `state` follows the new limit at once (`exhausted` when `spent + reserved >= limit`, `warning` when `spent * 100 >= 80 * limit`, else `ok`).
 34. **AC-34.** 80 % behavior (F-2, INV-15). Reservations that bring `spent + reserved` above 80 % without any settlement publish nothing. The settlement that takes settled `spent` to 80 % publishes exactly one `ai.budget_threshold_reached` and one audit record, even when several settlements cross concurrently, and calls continue.
-35. **AC-35.** Refusal behavior (F-3, INV-15, D-8). With settled `spent` below 100 % but `remaining < estimate`, the next reservation is refused with `ai_budget_exceeded` (429), no provider call occurs, no usage row is written, and `ai.budget_exhausted` is published exactly once for that row and period, with `spent` below the limit in the payload. A second refusal publishes nothing more. There are no exemptions: the same applies to system-scope and workspace-scope calls. The in-flight call at the moment of refusal still settles.
+35. **AC-35.** Refusal behavior (F-3, INV-15, D-8). With settled `spent` below 100 % but `remaining < estimate`, the next reservation is refused with `ai_budget_exceeded` (429), no provider call occurs, no usage row is written, and `ai.budget_exhausted` is published exactly once for that row and period, with `spent` below the limit in the payload. `GET /budget` `state` is computed from the counters and the current limit only (D-18), so it reads `exhausted` only while `spent + reserved >= limit`. A second refusal publishes nothing more. There are no exemptions: the same applies to system-scope and workspace-scope calls. The in-flight call at the moment of refusal still settles.
 36. **AC-36.** Reconciliation invariant: after a mixed workload (successes, failures, repairs, fallbacks), every period row with `reserved = 0` equals the sum of its usage records (INV-13).
-37. **AC-37.** A reservation is released or settled at most once, and a double settle attempt is a no-op. A reaped `reserved` record becomes `abandoned`, is charged its estimate and releases the reservation (INV-7, INV-14).
+37. **AC-37.** A reservation is released or settled at most once, and a double settle attempt is a no-op. A reaped `reserved` record becomes `abandoned` with `cost_micro_usd = reserved_micro_usd` and `finished_at` set, is charged its estimate to `spent` and releases the reservation in one statement (INV-7, INV-14). After the reap, the budget row (with `reserved = 0`) equals the sum of its usage records, so INV-13 still holds (checked with the AC-36 query).
 38. **AC-38.** No lock held across a provider call (INV-6). A spy `ProviderClient`, at the moment it is invoked, opens a separate connection and runs `SELECT ... FOR UPDATE NOWAIT` on the call's `ai_budget_periods` row and on its `ai_requests` row. Both succeed, so no lock is held. It also asserts that no session of the orchestrator's `application_name` is `idle in transaction`. The test runs for `run`, the `execute_request` handler, a repair call and a fallback call.
 
 ### 17.5 Async, jobs, retention, authorization, privacy
@@ -983,7 +990,7 @@ Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container
     - A's heartbeat, A's reservation, A's settlement and A's completion each affect 0 rows and change nothing, including when A and B use the same worker identity;
     - A cancels its provider call and performs no further state change;
     - B heartbeats, settles and completes normally with epoch 2, and the request has exactly one terminal state and one set of totals;
-    - A's `reserved` usage record is reaped after 360 s, becomes `abandoned` and is charged its estimate.
+    - A's `reserved` usage record is reaped after 360 s, becomes `abandoned` with `cost_micro_usd = reserved_micro_usd` and is charged its estimate, and afterwards INV-13 still holds for the budget row (AC-36 query).
 44. **AC-44.** Missing credentials in an async job (H). With no usable provider key, the `execute_request` handler makes no reservation and no call, ends the request `failed` with `error_code = provider_not_configured`, publishes `ai.request_failed` once, and returns normally. The queue does not retry it (no re-enqueue, no `max_attempts` consumed, nothing on `jobs:dead`). No `ai_usage_records` row exists and no budget row changes.
 45. **AC-45.** Sync request lifecycle (I). For `run` and `embed_texts`:
     - a call rejected by pre-routing validation (unready task, disallowed scope, user-path restriction, modality, embedding limits) leaves no row;
@@ -1009,13 +1016,13 @@ Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container
 
 Marker `ai_live`. It is excluded from `scripts/check.py` and from `just test-db`, and it only runs when `AI_LIVE_TESTS=1` and the needed provider key is present in the ignored `.env.test.local`. It runs against the test database. Keys never appear in output.
 
-Operational prerequisites (not code, section 20.3): a dedicated Google project with billing disabled for the Gemini key; a dedicated OpenAI test key with a provider-side hard spend limit (subject to OQ-2). The tests send **synthetic text only**, never real user data. The Gemini free tier may allow the provider to use submitted content. The owner must verify Google's current terms before any real user content is ever sent to it.
+Operational prerequisites (not code, section 20.3): a dedicated Google project with billing disabled for the Gemini key; a dedicated OpenAI test key with a provider-side hard spend limit (D-16). The tests send **synthetic text only**, never real user data. The Gemini free tier may allow the provider to use submitted content. The owner must verify Google's current terms before any real user content is ever sent to it.
 
 54. **AC-54.** *Spend cap (INV-27, D-11).* The 20 USD total across all test runs is enforced by two controls:
     - a provider-side hard spend limit on the dedicated paid-provider test key (the one control the code cannot bypass), and a Google project with billing disabled;
     - a cumulative counter kept **outside the test database transaction**, in a git-ignored local ledger file (the implementation adds it to `.gitignore`). After each real call the fixture adds the catalog-computed cost in integer micro-USD. Before each real call the fixture aborts the test if the cumulative total plus that call's worst-case estimate would pass 20 USD, and a per-session guard aborts the remaining tests if the session total passes 2 USD.
     The suite documents the key it expects and never uses a production key. It is designed to cost far below 1 USD: at most 3 provider calls, `max_output_units ≤ 300`, and texts of at most a few sentences.
-55. **AC-55.** One real `embed_texts` call over 3 short synthetic strings returns 3 vectors of length 1024, `embedding_version="v1-d1024"`, usage > 0 and cost > 0 in the ledger. This test needs an OpenAI key, a paid provider, and runs only if OQ-2 is resolved to option (a).
+55. **AC-55.** One real `embed_texts` call over 3 short synthetic strings returns 3 vectors of length 1024, `embedding_version="v1-d1024"`, usage > 0 and cost > 0 in the ledger. It uses the dedicated OpenAI test key with a provider-side hard spend limit (D-16).
 56. **AC-56.** One real task call through the Router with Gemini (a cheap `interactive` task using a test-only schema) returns a strictly valid output, writes a ledger row whose recorded cost matches the catalog formula for the provider-reported units, and increases the workspace budget's `spent`. A quota-exhausted response from the free tier is a failed attempt (`provider_rate_limited`) and never triggers a paid call.
 57. **AC-57.** The same run's captured logs contain no prompt or completion text and no key (INV-18, INV-20). The test fails if the output contains the sentinel strings used in the prompt.
 
@@ -1078,39 +1085,11 @@ Operational prerequisites (not code, section 20.3): a dedicated Google project w
 
 ## 19. Open Questions
 
-These are the open gaps. None is decided. Each lists options and a recommendation. Where the body of the spec needs a value to stay testable, it carries a **provisional** marker pointing here. Questions decided by the owner are in section 20.
-
-**OQ-1. Which Gemini models fill each quality tier?**
-D-4 fixes Gemini as the only chat provider but does not name the models. The catalog needs at least a `standard` and a `high` tier, and ideally a `basic` tier.
-- (a) One cheaper and one stronger Gemini model.
-- (b) A single Gemini model, with the `high` tier initially empty.
-- (c) The owner names the models at implementation time.
-- *Recommendation:* (a), chosen at implementation time against Google's current official documentation (model list, context windows, pricing, free-tier terms and quotas), recording source URL and date in the catalog. No prices or limits are written from memory. The smoke test uses the cheapest eligible model.
-
-**OQ-2. How is the real embedding smoke test (AC-55) paid for?**
-`text-embedding-3-small` is an OpenAI model, and OpenAI is a paid provider. Gemini is run from a Google project with billing disabled, so the embedding test is the only real call that needs a paid key.
-- (a) A dedicated OpenAI test key with a provider-side hard spend limit.
-- (b) Skip the real embedding test and run only the real Gemini task test.
-- (c) Use the fake provider only for embeddings.
-- *Recommendation:* (a). It tests the one real path whose model and dimension are fixed, and the provider-side limit keeps the 20 USD cap safe.
-
-**OQ-3. Should usage rows survive hard deletion of a workspace or request?**
-Section 7 and the retention rules say usage rows are accounting history and are retained. In 4.1 to 4.3, `ai_requests.workspace_id`, `ai_usage_records.request_id`, `ai_usage_records.workspace_id` and `ai_budget_periods.workspace_id` use `ON DELETE CASCADE`. A hard delete would remove the history.
-- (a) Keep the cascade. Workspace deletion is soft today (`deleted_at`), and hard deletion and export belong to `security_compliance`, so nothing in this phase deletes these rows.
-- (b) Use `SET NULL` or no foreign key on the usage and budget tables. This needs `workspace_id` and `request_id` to be nullable and the `scope_workspace` check to change.
-- (c) Archive the rows to a retained table, or export them, before any hard delete.
-- *Recommendation:* (a) for this phase, and let `security_compliance` choose between (b) and (c) when it defines hard deletion.
-
-**OQ-4. What happens to the notification flags and `state` when the limit changes mid-month?**
-Limits are read from configuration at each reservation (D-9). The 80 % and refusal events are once per budget row and period (INV-15). The spec provisionally never resets `warning_notified_at` or `exhausted_notified_at`, and `GET /budget` `state` still reports `exhausted` after a raise if a call was refused earlier in the month (section 6).
-- (a) Never reset the flags (events stay once per period), and compute `state` from the current limit: `exhausted` when `spent + reserved >= limit`, `warning` at 80 % of `spent`, else `ok`. The flags keep only their event role.
-- (b) Reset `warning_notified_at` and `exhausted_notified_at` when the limit is raised above current usage, so the events can fire again.
-- (c) Keep the provisional behavior in the spec (flags never reset, flag still drives `state`).
-- *Recommendation:* (a). It keeps INV-15 intact and shows the user a state that matches the limit in force.
+None. The questions of revision 2 are decided (D-16 to D-18) or moved to implementation inputs (20.4). Any gap found later is added here with options and a recommendation, undecided.
 
 ## 20. Decisions
 
-The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13 were Open Questions in the first draft (the former number is shown). Revision 2 changed D-2, D-4, D-5, D-9 and D-11, and added D-14 and D-15 (their "was OQ" numbers are first-draft numbers).
+The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13 were Open Questions in the first draft (the former number is shown). Revision 2 changed D-2, D-4, D-5, D-9 and D-11, and added D-14 and D-15 (their "was OQ" numbers are first-draft numbers). Revision 3 changed D-4 and added D-16 to D-19 (D-16 to D-18 were the open questions OQ-2 to OQ-4 of revision 2).
 
 ### 20.1 Decisions
 
@@ -1119,7 +1098,7 @@ The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13
 | D-1 (new) | The 100 USD system budget is a separate budget used only by system-scope calls (for example embedding GLOBAL knowledge). Workspace-scope calls count only against their own 25 USD workspace budget and never touch the system row. | Tenant spend cannot drain platform-level work, and a call reserves against one row, which removes double reservation and lock ordering. |
 | D-2 (was OQ-1; rev 2) | No generic scheduler is built. An external cron runs `python -m app.ai_platform.cron <reap\|reconcile\|purge>`, which enqueues the matching job with a UTC bucket (minute for reap, hour for reconcile and purge). Jobs are idempotent per bucket and safe under concurrent runs. A generic scheduler in `jobs_workers` stays a documented future option, not a prerequisite. | It avoids a new platform component before it is needed, and idempotent bucketed jobs make an external trigger safe. |
 | D-3 (was OQ-2) | The budget period is the UTC calendar month for both budgets, with no carry-over. | Simple, deterministic with `Clock`, and it matches the monthly wording. |
-| D-4 (was OQ-3; rev 2) | Chat uses **Gemini only**, through LiteLLM. OpenAI is used **only** for `text-embedding-3-small` (1024 dimensions, `v1-d1024`). No OpenAI chat model and no Anthropic adapter is enabled, and the catalog format allows adding them later without domain changes. Each catalog model has a `billing_mode` (`free_tier` or `paid`). The Router never falls back from a `free_tier` candidate to a `paid` candidate and never switches billing mode, and a quota-exhausted response is a failed attempt (`provider_rate_limited`). Prices live in the in-repo catalog with `price_version`, are verified against the provider's official pages at implementation time, and are not written in this spec. | A single chat provider keeps the first release small, a free-to-paid switch could create spend nobody approved, and prices from memory would go stale. |
+| D-4 (was OQ-3; rev 2) | Chat uses **Gemini only**, through LiteLLM. OpenAI is used **only** for `text-embedding-3-small` (1024 dimensions, `v1-d1024`). No OpenAI chat model and no Anthropic adapter is enabled, and the catalog format allows adding them later without domain changes. Billing mode is a property of the provider credential, not of the model (D-19). The Router never falls back from a `free_tier` candidate to a `paid` candidate and never switches billing mode, and a quota-exhausted response is a failed attempt (`provider_rate_limited`). Prices live in the in-repo catalog with `price_version`, are verified against the provider's official pages at implementation time, and are not written in this spec. | A single chat provider keeps the first release small, a free-to-paid switch could create spend nobody approved, and prices from memory would go stale. |
 | D-5 (was OQ-4; rev 2) | Stored async input/output content is purged **30 days** after completion by `ai_platform.purge_expired_content` v1, configured by `AI_ASYNC_CONTENT_RETENTION_DAYS` (default 30). Database backup and WAL retention are outside application control and must be reviewed against the privacy policy before production. | A bounded retention window limits stored user content while keeping the metadata needed for accounting, and backups are an operational concern the code cannot enforce. |
 | D-6 (was OQ-5) | Domain modules own and version their prompts. `ai:usage_read` is for OWNER and ADMIN only. | Prompts encode domain knowledge, and cost visibility is a management concern. |
 | D-7 (was OQ-6) | `run()` is allowed from a user request path only for `interactive` tasks. Otherwise it raises `ValidationFailed` with a fixed message. | Long AI work must not block API requests (§53). |
@@ -1131,8 +1110,12 @@ The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13
 | D-13 (was OQ-12) | A missing provider key raises `ConfigurationError` (`AiProviderNotConfigured`) at call time. A readiness helper (`check_ai_providers`) is exported for `rag` to call at startup. In an async job a missing key ends the request `failed` with `provider_not_configured` and is not retried. | It matches core's "fail at the point of use" configuration philosophy, and a retry cannot fix a missing key. |
 | D-14 (was OQ-2 of rev 1) | `submit` makes an advisory budget pre-check and raises `AiBudgetExceeded` when the budget step removes the last candidate. The atomic reservation at execution stays the authority. | The user learns immediately instead of waiting for a failed job, while one authority prevents disagreement. |
 | D-15 (was OQ-3 of rev 1) | System scope is allowed only for `EMBED_TEXT`. Widening it needs a spec change. Only code under `app/ai_platform/` and `app/rag/` may construct a system `AiCallContext`, enforced by an architecture test. | A system context has no workspace, so unrestricted use would let a feature bypass its workspace budget. |
+| D-16 (was OQ-2, rev 2) | The real embedding smoke test (AC-55) uses a dedicated OpenAI test key with a provider-side hard spend limit. | It tests the one real embedding path whose model and dimension are fixed, and the provider-side limit is the control the code cannot bypass. |
+| D-17 (was OQ-3, rev 2) | `ON DELETE CASCADE` stays on the `ai_*` foreign keys for now. Hard deletion and export belong to `security_compliance`, which will choose between `SET NULL` and an archive. | Workspace deletion is soft today, so nothing in this phase deletes these rows, and the retention policy for hard deletion is not an `ai_platform` decision. |
+| D-18 (was OQ-4, rev 2) | `warning_notified_at` and `exhausted_notified_at` are never reset and only control event publication. `GET /budget` `state` is computed from the current limit: `exhausted` when `spent + reserved >= limit`, `warning` when `spent * 100 >= 80 * limit`, else `ok`. | Events stay once per period (INV-15), and the user sees a state that matches the limit in force. |
+| D-19 (new, rev 3) | Billing mode is a property of the provider credential, not of the model. `AI_GEMINI_BILLING_MODE` = `free_tier` or `paid` (default `free_tier`); the OpenAI embedding credential is always `paid`. The catalog has no billing-mode field. The Router derives each candidate's mode from provider configuration. `cost_micro_usd` is the metered cost at the catalog list price for both modes: the application's accounting figure for budgets and the test guards, not the provider's invoice. | Free or paid is decided by how the credential's project is billed, not by the model, and one accounting figure keeps budgets and guards comparable across modes. |
 
-Review fixes F-1 to F-6 are applied in sections 4, 5, 7, 11, 12, 16 and 17, and the fixed decisions listed in F-6 are unchanged. Revision 2 also applies three review items: lease fencing (E-1, 8.1, INV-28), the budget reconciliation job (E-2, 8.4, INV-30) and the error classification table (E-3, 10.3).
+Review fixes F-1 to F-6 are applied in sections 4, 5, 7, 11, 12, 16 and 17, and the fixed decisions listed in F-6 are unchanged. Revision 2 also applies three review items: lease fencing (E-1, 8.1, INV-28), the budget reconciliation job (E-2, 8.4, INV-30) and the error classification table (E-3, 10.3). Revision 3 adds precision fixes for abandoned-record accounting (8.2, 12.1) and the identifier-type boundary note (5.1).
 
 ### 20.2 Prerequisite (a separate task, before `ai_platform` implementation)
 
@@ -1144,9 +1127,16 @@ There is no scheduler prerequisite (D-2).
 
 - An external cron is configured to run the three CLI commands in 8.5 at the cadence given there.
 - A dedicated Google project with billing disabled exists for the real-provider tests.
-- If OQ-2 is resolved to option (a), a dedicated OpenAI test key exists with a provider-side hard spend limit.
+- A dedicated OpenAI test key exists with a provider-side hard spend limit (D-16).
+- The billing mode configured for a provider (`AI_GEMINI_BILLING_MODE`) must match the real billing state of the Google project that owns the key. A mismatch is an operator error that the application cannot detect.
 - Before production, database backup and WAL / point-in-time-recovery retention are reviewed against the privacy policy (8.3).
 - Before any real user content is sent to the Gemini free tier, the owner verifies Google's current terms on use of submitted content.
+
+### 20.4 Implementation inputs
+
+These are not spec blockers. They are inputs the owner supplies at implementation time.
+
+- **Gemini models per quality tier.** The owner names the Gemini models for each tier at implementation time against Google's current official documentation (model list, context window, price, free-tier terms and quotas). The catalog records the source URL and the date for each. No prices or limits are written from memory, in this spec or in the catalog.
 
 ## Frontend
 
