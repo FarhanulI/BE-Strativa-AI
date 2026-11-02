@@ -1,6 +1,6 @@
 # AI Platform Module Specification
 
-Status: reviewed; decisions applied (rev 3); awaiting final owner approval. Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec.
+Status: approved by owner (rev 3); implementation may start after prerequisite P-2. Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec.
 
 No provisional markers remain in rev 3, and section 19 has no open questions. Section 20 lists the decided items, the one prerequisite task (P-2), the operational prerequisites and the implementation inputs.
 
@@ -624,7 +624,9 @@ Platform task (not in §44; added because §54 requires an embedding path):
 
 | Task | Capabilities | Output | Allowed scopes | Notes |
 | --- | --- | --- | --- | --- |
-| `EMBED_TEXT` | embedding | `EmbeddingBatch` (not a Pydantic task schema) | workspace, system | internal, used by `EmbeddingService` only. Pinned to OpenAI `text-embedding-3-small` at 1024 dimensions. No fallback. Cannot be requested through `AiTaskRequest`. |
+| `EMBED_TEXT` | embedding | `EmbeddingBatch` (not a Pydantic task schema) | workspace, system | internal, used by `EmbeddingService` only. Pinned to OpenAI `text-embedding-3-small` at 1024 dimensions. No fallback. Cannot be requested through `AiTaskRequest`. Classes: quality `standard`, latency `standard` (60 s deadline), cost `low` (worst-case ceiling 20,000 micro-USD) (D-20). |
+
+The Router applies the same filters and deadline logic to `EMBED_TEXT` as to every other task, except that its candidate list is the single pinned model (10.2 step 10) and there is no fallback (D-20).
 
 Schema and prompt ownership:
 
@@ -797,6 +799,8 @@ If actual cost exceeds the reserved estimate, which should not happen because th
 
 **Reconciliation.** For any period row with `reserved_micro_usd = 0`, `spent_micro_usd` equals the sum of `cost_micro_usd` over `ai_usage_records` of that scope, workspace and period (INV-13). The `ai_platform.reconcile_budgets` job (8.4) checks this in production and reports a mismatch without repairing it. The test suite includes the same check (AC-36).
 
+**Lock order.** Any transaction that touches more than one of these tables locks in this order: the `ai_requests` row, then the `ai_usage_records` row, then the `ai_budget_periods` row (INV-32). The fenced settlement (8.1) already follows it. The reaper's abandon statement (8.2) touches the usage row and then the budget row in that order, and a refusal touches only the budget row.
+
 ### 12.4 Logging, audit, privacy
 
 - Log events: `ai_call_started`, `ai_call_finished`, `ai_budget_refused`, `ai_budget_threshold`, `ai_content_purged`, `ai_budget_reconciled`, `ai_budget_reconcile_mismatch`. The only fields are:
@@ -899,10 +903,11 @@ Minimal and read-only. It is justified because budget enforcement (80 % warning,
 29. **INV-29.** Billing mode. All provider attempts of one request use candidates of one `billing_mode`. The Router never falls back from a `free_tier` candidate to a `paid` candidate and never switches billing mode. A quota-exhausted response is a failed attempt (`provider_rate_limited`).
 30. **INV-30.** Budget reconciliation never changes `ai_budget_periods` counters or `ai_usage_records`. A mismatch is reported once per budget row and bucket, with ids and counts only.
 31. **INV-31.** A system-scope `AiCallContext` can be built only by code under `app/ai_platform/` and `app/rag/`, and only `EMBED_TEXT` may run in system scope. `AiCallContext.for_worker` always has a workspace.
+32. **INV-32.** Lock order is request, usage record, budget row in every transaction that touches more than one of them (12.3). Concurrent fenced settlements, reaper abandons and budget refusals on the same rows cannot deadlock.
 
 ## 17. Acceptance criteria
 
-Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container with pgvector (marker `db`, with the existing session-scoped migration and rollback fixtures, plus committed-data fixtures for concurrency tests), and nightly on the Neon test branch. They never run on dev or production. They need no network and no provider key. The local-database mode of the test guard is prerequisite P-2 (section 20). The real-provider smoke test (AC-54 to AC-57) is a separate suite. Job handlers are invoked directly in tests. No cron and no scheduler is needed.
+Fake-provider tests (AC-1 to AC-53 and AC-58) run by default on a local Postgres container with pgvector (marker `db`, with the existing session-scoped migration and rollback fixtures, plus committed-data fixtures for concurrency tests), and nightly on the Neon test branch. They never run on dev or production. They need no network and no provider key. The local-database mode of the test guard is prerequisite P-2 (section 20). The real-provider smoke test (AC-54 to AC-57) is a separate suite. Job handlers are invoked directly in tests. No cron and no scheduler is needed.
 
 ### 17.1 Architecture and contract (DB-free unless stated)
 
@@ -910,7 +915,7 @@ Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container
 2. **AC-2.** An architecture test fails if a catalog provider or model identifier appears in `app/` outside `app/ai_platform/`, or inside it outside the catalog file, provider adapter and module configuration (INV-3).
 3. **AC-3.** Unit test: `AiTaskRequest` rejects unknown fields (including `model`, `provider` and `tools`). Reflection over `AiTaskRequest`, `AiTaskResult`, `AiRequestStatus` and the exception classes finds no field or message naming a provider or model (INV-2). Signature reflection shows `AiOrchestrator.run` and `EmbeddingService.embed_texts` have no idempotency parameter, and only `submit` has `idempotency_key` (F-1).
 4. **AC-4.** The module-boundary test passes with `ai_platform` imported only through `app.ai_platform`, and the package exports every name listed in section 5, including `check_ai_providers`, `AiProviderNotConfigured` and `AiPlatformConfig`.
-5. **AC-5.** The task registry contains exactly the eight §44 tasks with the capabilities, schema names, classes and allowed scopes in section 9, plus the internal `EMBED_TEXT`. A test pins the table. `EMBED_TEXT` cannot be built through `AiTaskRequest`.
+5. **AC-5.** The task registry contains exactly the eight §44 tasks with the capabilities, schema names, classes and allowed scopes in section 9, plus the internal `EMBED_TEXT`. A test pins the table, including the `EMBED_TEXT` classes: quality `standard`, latency `standard` (60 s deadline) and cost `low` (ceiling 20,000 micro-USD) (D-20). `EMBED_TEXT` cannot be built through `AiTaskRequest`.
 6. **AC-6.** Every `ai.*` event model is registered once in `DEFAULT_EVENT_REGISTRY`, forbids extra fields, and no field name matches `token`. `publish` accepts each of them (INV-18).
 7. **AC-7.** Settings and config validation:
    - `Settings(embedding_dim=1024)` is accepted, any other positive `embedding_dim` makes `build_ai_platform` raise `ConfigurationError`, and an unset value is accepted.
@@ -1010,7 +1015,8 @@ Fake-provider tests (AC-1 to AC-53) run by default on a local Postgres container
     - `get_status` and `get_output` with another workspace's request id raise `NotFound`.
     - System-scope rows are absent from workspace reports.
     - Captured logs, events, audit rows, job payloads and error responses of a full run (success, schema failure, budget refusal) contain none of the test prompt, completion or output strings and no `token`-named key (INV-18, INV-19, INV-20).
-53. **AC-53.** `embed_texts` with the fake provider returns vectors of length 1024, `embedding_model="text-embedding-3-small"`, `embedding_version="v1-d1024"`, and records usage against the budget row of the context's scope. Empty batches, oversize batches and oversize texts are rejected, and there is no fallback model (INV-12).
+53. **AC-53.** `embed_texts` with the fake provider returns vectors of length 1024, `embedding_model="text-embedding-3-small"`, `embedding_version="v1-d1024"`, and records usage against the budget row of the context's scope. Empty batches, oversize batches and oversize texts are rejected, and there is no fallback model (INV-12). The embedding call carries a 60 s deadline (D-20).
+58. **AC-58.** Lock order (INV-32, 12.3). With committed sessions, concurrent fenced settlements, reaper abandon statements and budget refusals run against the same request, usage and budget rows, repeated over many iterations. The test asserts that no deadlock or serialization failure occurs, that every settlement and abandon applies at most once, and that the INV-13 query (AC-36) holds for the budget rows afterwards.
 
 ### 17.6 Real-provider smoke test (separate, small)
 
@@ -1061,6 +1067,7 @@ Operational prerequisites (not code, section 20.3): a dedicated Google project w
 | INV-29 | AC-17 |
 | INV-30 | AC-46, AC-47 |
 | INV-31 | AC-12, AC-31 |
+| INV-32 | AC-58 |
 
 ## 18. Non-goals
 
@@ -1114,6 +1121,7 @@ The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13
 | D-17 (was OQ-3, rev 2) | `ON DELETE CASCADE` stays on the `ai_*` foreign keys for now. Hard deletion and export belong to `security_compliance`, which will choose between `SET NULL` and an archive. | Workspace deletion is soft today, so nothing in this phase deletes these rows, and the retention policy for hard deletion is not an `ai_platform` decision. |
 | D-18 (was OQ-4, rev 2) | `warning_notified_at` and `exhausted_notified_at` are never reset and only control event publication. `GET /budget` `state` is computed from the current limit: `exhausted` when `spent + reserved >= limit`, `warning` when `spent * 100 >= 80 * limit`, else `ok`. | Events stay once per period (INV-15), and the user sees a state that matches the limit in force. |
 | D-19 (new, rev 3) | Billing mode is a property of the provider credential, not of the model. `AI_GEMINI_BILLING_MODE` = `free_tier` or `paid` (default `free_tier`); the OpenAI embedding credential is always `paid`. The catalog has no billing-mode field. The Router derives each candidate's mode from provider configuration. `cost_micro_usd` is the metered cost at the catalog list price for both modes: the application's accounting figure for budgets and the test guards, not the provider's invoice. | Free or paid is decided by how the credential's project is billed, not by the model, and one accounting figure keeps budgets and guards comparable across modes. |
+| D-20 (new) | `EMBED_TEXT` carries the classes quality `standard`, latency `standard` (60 s deadline) and cost `low` (worst-case ceiling 20,000 micro-USD). The Router applies the same filters and deadline logic to it as to other tasks, except that the candidate list is the single pinned model (10.2 step 10) and there is no fallback. | Every routed call needs a deadline and a cost ceiling, and `sync_stale_after` assumes the longest deadline is 300 s. |
 
 Review fixes F-1 to F-6 are applied in sections 4, 5, 7, 11, 12, 16 and 17, and the fixed decisions listed in F-6 are unchanged. Revision 2 also applies three review items: lease fencing (E-1, 8.1, INV-28), the budget reconciliation job (E-2, 8.4, INV-30) and the error classification table (E-3, 10.3). Revision 3 adds precision fixes for abandoned-record accounting (8.2, 12.1) and the identifier-type boundary note (5.1).
 
