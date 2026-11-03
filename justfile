@@ -21,3 +21,6 @@ test-db-local:
 
 test-db-down:
     docker rm -f strativa-test-db
+
+dev:
+    uv run --python 3.12 --no-sync python scripts/dev.py

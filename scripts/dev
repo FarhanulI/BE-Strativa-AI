@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Start Redis (WSL), run migrations, start uvicorn. Extra flags go to scripts/dev.py.
+cd "$(dirname "$0")/.." || exit 1
+exec uv run --python 3.12 --no-sync python scripts/dev.py "$@"

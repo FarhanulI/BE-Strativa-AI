@@ -58,6 +58,11 @@ Expose stable shared primitives through the `core` package public exports. Consu
 - The dedicated test branch was independently confirmed as `br-rapid-silence-b3iezotg`, endpoint `ep-jolly-grass-b3wiywq9`, in project `nameless-heart-50634755`; dev uses a separate endpoint. Identifiers document the verification run, not a hard-coded application default.
 - A real Redis URL is required for the demo. Verification used a temporary local Redis instance, not an in-memory replacement. See [the Phase 0 verification report](../../reports/phase0-verification.md) for commands and results.
 
+### Dev runner
+
+- `just dev` (or `uv run --python 3.12 --no-sync python scripts/dev.py`, or `scripts/dev` from a POSIX shell) starts the local dev stack in order: (1) Redis, unless something already answers `PING` on `127.0.0.1:16379`, started with the documented WSL command `wsl -d Ubuntu --exec redis-server --bind 127.0.0.1 --port 16379 --save "" --appendonly no` and stopped again on exit; (2) `scripts/migrate.py upgrade` through the normal migration guard; (3) `uvicorn app.main:app --reload --port 8000`.
+- It forces `APP_ENV=dev` (so the dev database in `.env.local` is used, never the test branch) and defaults `REDIS_URL` to `redis://127.0.0.1:16379/0` when unset. Flags: `--no-redis`, `--no-migrate`, `--no-reload`, `--port`. Without WSL, start Docker Redis per the README and pass `--no-redis`.
+
 ### OpenAPI endpoints
 
 None. Core contributes reusable error and pagination schemas and request-context plumbing; endpoint registration and the `/api/v1` contract belong to `api_contract` and owning modules. `ProblemDetails`, `CursorParams`, and `CursorPage` are importable from `app.core` and included as reusable OpenAPI components even before any collection endpoint is registered.

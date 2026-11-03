@@ -52,6 +52,8 @@ docker run -d --name redis-dev -p 6379:6379 redis:8
 
 Check with `wsl -d Ubuntu --exec redis-cli -p 16379 ping` (expects `PONG`).
 
+Or run everything in one step with `just dev` (Redis via WSL, migrations, uvicorn); see the core spec, "Dev runner".
+
 ## Run migrations
 
 ```powershell
