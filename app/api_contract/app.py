@@ -69,12 +69,6 @@ CONFIGURATION_ERROR_STATUS = 503
 CONFIGURATION_ERROR_CODE = "service_unavailable"
 CONFIGURATION_ERROR_TITLE = "Service Unavailable"
 CONFIGURATION_ERROR_DETAIL = "A required service is temporarily unavailable"
-CONFIGURATION_ERROR_RESPONSE = {
-    "description": CONFIGURATION_ERROR_TITLE,
-    "content": {
-        "application/problem+json": {"schema": {"$ref": "#/components/schemas/ProblemDetails"}}
-    },
-}
 
 
 def create_app(
@@ -205,10 +199,6 @@ def create_app(
                                 )
                                 continue
                             operation["responses"][status_key] = response
-                        # Routes that declare their own 503 (e.g. /readyz) keep it.
-                        operation["responses"].setdefault(
-                            str(CONFIGURATION_ERROR_STATUS), CONFIGURATION_ERROR_RESPONSE
-                        )
             app.openapi_schema = schema
         return app.openapi_schema
 

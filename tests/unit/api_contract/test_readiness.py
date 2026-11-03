@@ -320,11 +320,13 @@ async def test_login_without_redis_fails_closed_with_generic_503_problem() -> No
     assert "REDIS_URL" in entry["reason"]
 
 
-def test_openapi_declares_shared_503_without_replacing_readyz() -> None:
+def test_openapi_declares_503_only_for_readyz() -> None:
     schema = create_app(Settings(_env_file=None)).openapi()
-    login_503 = schema["paths"]["/api/v1/auth/login"]["post"]["responses"]["503"]
-    assert login_503["content"]["application/problem+json"]["schema"]["$ref"] == (
-        "#/components/schemas/ProblemDetails"
-    )
-    readyz_503 = schema["paths"]["/readyz"]["get"]["responses"]["503"]
-    assert "ReadinessResponse" in str(readyz_503)
+    with_503 = [
+        path
+        for path, item in schema["paths"].items()
+        for operation in item.values()
+        if "503" in operation["responses"]
+    ]
+    assert with_503 == ["/readyz"]
+    assert "ReadinessResponse" in str(schema["paths"]["/readyz"]["get"]["responses"]["503"])

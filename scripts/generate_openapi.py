@@ -21,4 +21,5 @@ settings = Settings(
 output_path.write_text(
     json.dumps(create_app(settings).openapi(), indent=2, sort_keys=True) + "\n",
     encoding="utf-8",
+    newline="\r\n",  # byte-identical to the FE target, which uses CRLF
 )

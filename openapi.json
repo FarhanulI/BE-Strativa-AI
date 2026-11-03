@@ -1586,16 +1586,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "summary": "Login",
@@ -1690,16 +1680,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "summary": "Logout",
@@ -1794,16 +1774,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -1910,16 +1880,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -2034,16 +1994,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -2150,16 +2100,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "summary": "Refresh",
@@ -2271,16 +2211,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "summary": "Register",
@@ -2393,16 +2323,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "summary": "Preview Invitation",
@@ -2515,16 +2435,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -2661,16 +2571,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -2785,16 +2685,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -2906,16 +2796,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -3032,16 +2912,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -3168,16 +3038,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -3324,16 +3184,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -3460,16 +3310,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -3591,16 +3431,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -3747,16 +3577,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -3878,16 +3698,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -4024,16 +3834,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -4155,16 +3955,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -4337,16 +4127,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -4481,16 +4261,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -4627,16 +4397,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -4800,16 +4560,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -4965,16 +4715,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -5111,16 +4851,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -5284,16 +5014,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -5450,16 +5170,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -5623,16 +5333,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -5783,16 +5483,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -5966,16 +5656,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -6132,16 +5812,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -6305,16 +5975,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -6465,16 +6125,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -6648,16 +6298,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -6813,16 +6453,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -6979,16 +6609,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -7152,16 +6772,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -7312,16 +6922,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -7495,16 +7095,6 @@
               }
             },
             "description": "External Service Error"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [

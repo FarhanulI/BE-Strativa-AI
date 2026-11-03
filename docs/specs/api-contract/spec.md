@@ -32,7 +32,7 @@ None. Uses the `db_migrations`, `jobs_workers`, and `observability_audit` public
 
 ### OpenAPI endpoints
 
-- `GET /readyz`: typed readiness response, no secrets; status reflects required database readiness. Document the RFC 7807 `ProblemDetails` schema for shared domain errors and a typed readiness response for HTTP 503.
+- `GET /readyz`: typed readiness response, no secrets; status reflects required database readiness. Document the RFC 7807 `ProblemDetails` schema for shared domain errors and a typed readiness response for HTTP 503. 503 is returned at runtime but intentionally not declared in OpenAPI for client routes (the central `ConfigurationError` handler still returns it); only `/readyz` declares a 503. The generated `openapi.json` must stay byte-identical (CRLF, SHA-256 `7d14bf11...bd88d`) to the FE target; a unit test fails on any drift from the committed copy or the hash, and a contract change must be agreed with the FE repo.
 - Auth and workspace endpoints registered from their public feature packages; feature specs own their endpoint contracts.
 - No demo endpoint or unrelated health routes in this integration.
 
