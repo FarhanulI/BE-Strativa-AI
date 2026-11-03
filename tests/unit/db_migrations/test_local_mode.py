@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+import app.db_migrations.guard as guard_module
 from app.core.config import AppEnvironment, ConfigurationError, Settings
 from app.db_migrations.guard import (
     confirm_local_test_database,
@@ -236,24 +237,37 @@ class FakeConnection:
         return FakeResult(self.row)
 
 
-@pytest.mark.parametrize("address", [None, "127.0.0.1", "::1"])
-def test_live_check_accepts_loopback_or_socket(address: str | None) -> None:
-    connection = FakeConnection(("strativa_test", address))
+MARKER = "local-throwaway-v1"
+
+
+def test_live_check_accepts_matching_database_and_marker() -> None:
+    connection = FakeConnection(("strativa_test", MARKER))
     asyncio.run(confirm_local_test_database(local_settings(), connection))
     assert len(connection.statements) == 1
+
+
+def test_live_check_reads_marker_not_address() -> None:
+    connection = FakeConnection(("strativa_test", MARKER))
+    asyncio.run(confirm_local_test_database(local_settings(), connection))
+    statement = connection.statements[0]
+    assert "current_setting('app.test_db_marker', true)" in statement
+    assert "inet_server_addr" not in statement
+    assert "inet_server_addr" not in Path(guard_module.__file__).read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(
     ("row", "fragment"),
     [
-        (("production", "127.0.0.1"), "database"),
-        (("strativa_test", "10.1.2.3"), "loopback"),
-        (("strativa_test", "not-an-ip"), "loopback"),
+        (("production", MARKER), "does not match"),
+        (("strativa_test", None), "marker"),
+        (("strativa_test", "other-value"), "marker"),
+        (("strativa_test", ""), "marker"),
+        (("strativa_test", "LOCAL-THROWAWAY-V1"), "marker"),
     ],
 )
-def test_live_check_refusals_use_fixed_messages(row: tuple[str, str], fragment: str) -> None:
-    connection = FakeConnection(row)
+def test_live_check_refusals_use_fixed_messages(row: tuple[str, str | None], fragment: str) -> None:
+    connection = FakeConnection(row)  # type: ignore[arg-type]
     with pytest.raises(ConfigurationError, match=fragment) as raised:
         asyncio.run(confirm_local_test_database(local_settings(), connection))
     assert_no_leak(raised.value)
-    assert "10.1.2.3" not in str(raised.value)
+    assert "other-value" not in str(raised.value)

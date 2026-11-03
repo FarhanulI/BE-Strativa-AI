@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 from typing import Any
 
 from sqlalchemy import text
@@ -15,6 +14,8 @@ from app.core import (
     require_local_test_targets,
 )
 from app.db_migrations.engine import build_async_engine
+
+LOCAL_TEST_DB_MARKER = "local-throwaway-v1"
 
 
 def validate_test_database_target(settings: Settings) -> str:
@@ -65,24 +66,22 @@ def _refuse_local_host_in_neon_mode(settings: Settings) -> None:
             )
 
 
-def _is_loopback_address(address: str) -> bool:
-    try:
-        return ipaddress.ip_address(address).is_loopback
-    except ValueError:
-        return False
-
-
 async def confirm_local_test_database(settings: Settings, connection: Any) -> None:
-    """Live server-side confirmation, run once before migrations in local mode."""
+    """Live server-side confirmation, run once before migrations in local mode.
+
+    Positive evidence that the server is the throwaway test database: the connected database
+    name matches the configured one, and the database-level marker set by the container's init
+    script is present with the fixed value. No address-based decision is made.
+    """
     expected = parse_database_target(settings.require_database_url(direct=True)).database
     result = await connection.execute(
-        text("SELECT current_database(), host(inet_server_addr())")
+        text("SELECT current_database(), current_setting('app.test_db_marker', true)")
     )
-    database, address = result.one()
+    database, marker = result.one()
     if database != expected:
         raise ConfigurationError("Connected database does not match the configured test database")
-    if address is not None and not _is_loopback_address(address):
-        raise ConfigurationError("Connected server is not a loopback or unix-socket endpoint")
+    if marker != LOCAL_TEST_DB_MARKER:
+        raise ConfigurationError("Connected database lacks the local test database marker")
 
 
 async def _verify_local_test_database(settings: Settings) -> None:
