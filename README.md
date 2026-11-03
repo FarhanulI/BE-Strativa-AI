@@ -89,7 +89,25 @@ Restart the server after changing env files.
 | --- | --- |
 | `just check` | Lint, type-check and unit tests |
 | `just migrate` | Apply migrations to the dev DB |
-| `just test-db` | Run DB tests (needs `.env.test.local`, `APP_ENV=test`) |
+| `just test-db` | Run DB tests in Neon mode (needs `.env.test.local`, `APP_ENV=test`) |
+| `just test-db-up` / `just test-db-local` / `just test-db-down` | Start, use and remove the local Docker test database (`TEST_DB_MODE=local`) |
 | `just openapi` | Regenerate `openapi.json` |
+
+## Test database modes
+
+DB-marked tests (`-m db`) can run in two explicit modes. Neither is inferred.
+
+- **Neon mode (default, `TEST_DB_MODE` unset or `neon`).** Needs `.env.test.local` with `APP_ENV=test`, `NEON_BRANCH_NAME=test` and the Neon test branch URLs. Behaviour is unchanged, with one addition: a loopback or unix-socket host is refused, so a local database cannot be passed off as the Neon branch.
+- **Local mode (`TEST_DB_MODE=local`).** Runs on a throwaway Postgres container with pgvector (`compose.test-db.yaml`), the default for development. Set `TEST_DB_MODE=local` and `APP_ENV=test` in the process environment, and put the URLs in the git-ignored `.env.test.docker.local` (placeholders in `.env.example`). `.env.test.local` is never read in this mode, and `NEON_BRANCH_NAME` must be unset. The guard accepts only a `localhost`, `127.0.0.1`, `::1` or unix-socket host, a database name ending in `_test`, and identical pooled and direct URLs, and then confirms on the live server that `current_database()` matches. Anything else refuses to run.
+
+```powershell
+$env:TEST_DB_PASSWORD="<choose a throwaway password>"   # same value as in .env.test.docker.local
+docker compose -f compose.test-db.yaml up -d --wait     # just test-db-up
+$env:TEST_DB_MODE="local"; $env:APP_ENV="test"
+uv run python scripts/test_db.py                        # just test-db-local
+docker rm -f strativa-test-db                           # just test-db-down (data is on tmpfs)
+```
+
+SQLite is never a substitute. Tests never run against the dev or production databases. A scheduled nightly run on the Neon `test` branch is planned as a later delivery-phase job and is not defined yet.
 
 See `docs/specs/` for module specs and `docs/reports/phase0-verification.md` for verification commands.

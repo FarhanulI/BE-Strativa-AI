@@ -1,6 +1,7 @@
 .neon
 .env.local
 .env.test.local
+.env.test.docker.local
 node_modules/
 .venv/
 __pycache__/

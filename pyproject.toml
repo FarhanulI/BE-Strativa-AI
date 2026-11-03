@@ -38,7 +38,7 @@ packages = ["app"]
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
-markers = ["db: requires the Neon test branch"]
+markers = ["db: requires a test database (Neon test branch, or the local Docker database with TEST_DB_MODE=local)"]
 
 [tool.ruff]
 target-version = "py312"

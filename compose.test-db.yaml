@@ -1,0 +1,21 @@
+# Throwaway local Postgres (with pgvector) for DB tests in TEST_DB_MODE=local.
+# Bound to 127.0.0.1 only; data lives on tmpfs and disappears when the container is removed.
+# Required: export TEST_DB_PASSWORD (choose any throwaway value; never commit it).
+name: strativa-test-db
+services:
+  test-db:
+    image: pgvector/pgvector:pg16
+    container_name: strativa-test-db
+    environment:
+      POSTGRES_USER: app_test
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:?set TEST_DB_PASSWORD to a throwaway value}
+      POSTGRES_DB: strativa_test
+    ports:
+      - "127.0.0.1:55444:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_test -d strativa_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
