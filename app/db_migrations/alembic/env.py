@@ -6,6 +6,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.pool import NullPool
 
+import app.ai_platform  # noqa: F401  (registers the ai_* tables on the shared metadata)
 from app.auth import AuthSession, User
 from app.core import Settings
 from app.db_migrations import (
