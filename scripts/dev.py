@@ -62,7 +62,8 @@ def main() -> None:
             if result.returncode:
                 raise SystemExit(result.returncode)
         command = [
-            sys.executable, "-m", "uvicorn", "app.main:app", "--port", str(args.port),
+            sys.executable, "-m", "uvicorn", "app.main:app",
+            "--host", "127.0.0.1", "--port", str(args.port),
         ]  # fmt: skip
         if not args.no_reload:
             command.append("--reload")

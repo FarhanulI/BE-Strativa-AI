@@ -17,9 +17,9 @@ uv sync
 
 ## Configuration
 
-Config is read from environment files in the `api/` folder (next to this README), regardless of the directory you launch from.
+Config is read from environment files in the repository root (next to this README), regardless of the directory you launch from.
 
-For dev, create `api/.env.local`:
+For dev, create repository-root `.env.local`:
 
 ```
 APP_ENV=dev

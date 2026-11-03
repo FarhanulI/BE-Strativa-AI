@@ -816,3 +816,46 @@ async def test_concurrent_owner_removals_preserve_one_owner(migrated_test_schema
             )
             await session.execute(User.__table__.delete().where(User.id.in_(owner_ids)))
         await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_bff_flow_reads_set_cookie_header_and_replays_it_over_plain_http(
+    db_session: AsyncSession,
+) -> None:
+    """The FE BFF is server-to-server: it parses Set-Cookie and sends a manual Cookie header."""
+    app = create_app(
+        Settings(_env_file=None, auth_jwt_secret="test-secret-long-enough-for-hs256-signing")
+    )
+    app.dependency_overrides[database_session] = _override_session_with_savepoint(db_session)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        register = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "bff@example.test",
+                "password": "correct horse battery staple",
+                "display_name": "Bff User",
+                "workspace_name": "Bff Workspace",
+            },
+        )
+        assert register.status_code == 200
+        set_cookies = register.headers.get_list("set-cookie")
+        assert len(set_cookies) == 1
+        first = set_cookies[0]
+        assert first.startswith("refresh_token=")
+        token = first.split(";", maxsplit=1)[0].split("=", maxsplit=1)[1]
+        assert token
+
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", headers={"Cookie": f"refresh_token={token}"}
+        )
+
+    assert refreshed.status_code == 200
+    assert refreshed.json()["expires_in"] == 900
+    rotated = refreshed.headers.get_list("set-cookie")
+    assert len(rotated) == 1
+    attributes = rotated[0].lower()
+    for expected in ("httponly", "secure", "samesite=lax", "path=/api/v1/auth", "max-age=2592000"):
+        assert expected in attributes
+    assert "domain=" not in attributes
+    assert rotated[0].split(";", maxsplit=1)[0] != first.split(";", maxsplit=1)[0]

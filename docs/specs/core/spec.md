@@ -63,6 +63,14 @@ Expose stable shared primitives through the `core` package public exports. Consu
 - `just dev` (or `uv run --python 3.12 --no-sync python scripts/dev.py`, or `scripts/dev` from a POSIX shell) starts the local dev stack in order: (1) Redis, unless something already answers `PING` on `127.0.0.1:16379`, started with the documented WSL command `wsl -d Ubuntu --exec redis-server --bind 127.0.0.1 --port 16379 --save "" --appendonly no` and stopped again on exit; (2) `scripts/migrate.py upgrade` through the normal migration guard; (3) `uvicorn app.main:app --reload --port 8000`.
 - It forces `APP_ENV=dev` (so the dev database in `.env.local` is used, never the test branch) and defaults `REDIS_URL` to `redis://127.0.0.1:16379/0` when unset. Flags: `--no-redis`, `--no-migrate`, `--no-reload`, `--port`. Without WSL, start Docker Redis per the README and pass `--no-redis`.
 
+### Frontend integration
+
+- Run the API for the FE with `just dev` (see Dev runner). It serves `http://127.0.0.1:8000` (`--port` to change; the host is fixed to `127.0.0.1`), always with `APP_ENV=dev` against the Neon DEV branch from `.env.local`; it never reads `.env.test.local` or `.env.test.docker.local`.
+- In the FE repo set `BACKEND_INTERNAL_URL=http://127.0.0.1:8000` (server-only; use the port you started on) and, for plain http, `COOKIE_SECURE=false`. Use `127.0.0.1`, not `localhost`: the API listens on IPv4 only and `localhost` can resolve to `::1` in Node.
+- API env (`.env.local`, template in `.env.example`): `APP_ENV=dev`, `NEON_BRANCH_NAME=dev`, `DATABASE_URL`, `DATABASE_URL_DIRECT`, `REDIS_URL` (defaults to the WSL Redis at `redis://127.0.0.1:16379/0` under `just dev`) and `AUTH_JWT_SECRET` (at least 32 bytes). Access-token TTL (15 min) and the refresh cookie are code constants. No CORS setting is needed because the BFF is server-to-server.
+- Readiness: `GET http://127.0.0.1:8000/readyz` returns 200 `{"status":"ready","database":"ok","redis":"ok"}` when the stack is usable, and 503 `not_ready` with the failing dependency otherwise. A 503 problem+json on `/auth/*` with the generic "required service" detail means `REDIS_URL` or `AUTH_JWT_SECRET` is missing; the server log names it.
+- Contract: `openapi.json` is pinned byte-for-byte to the FE target (see api-contract spec).
+
 ### OpenAPI endpoints
 
 None. Core contributes reusable error and pagination schemas and request-context plumbing; endpoint registration and the `/api/v1` contract belong to `api_contract` and owning modules. `ProblemDetails`, `CursorParams`, and `CursorPage` are importable from `app.core` and included as reusable OpenAPI components even before any collection endpoint is registered.
