@@ -33,3 +33,10 @@ No ai_platform paths appear in either document, so there are no class (a) differ
 ## Verified present (no change needed)
 
 `PATCH /auth/me`; password 12 to 128; name limits 160; 428/409-with-current-state on all 13 profile writes (`tests/db/test_profile.py`); central `ConfigurationError` to 503 handler; refresh cookie `refresh_token` (HttpOnly, Secure, SameSite=Lax, path `/api/v1/auth`, max-age = refresh TTL); `expires_in` (900) on token responses.
+
+## Final state (after step 6)
+
+- `scripts/generate_openapi.py` regenerated the repo `openapi.json`: byte-identical to the committed file (no change).
+- Against the target, the only remaining difference is class (c) item 1: the central `503` problem+json response declared on the 40 operations that do not own one. There are no class (a) differences (no ai_platform routes are in the Phase 1 document). Paths, methods, schemas, parameters and headers are identical.
+- Item 1 is awaiting an owner decision: either the FE target adds the `503` response, or the BE stops declaring it (the runtime 503 stays either way).
+- Nothing was copied to the FE repo.
