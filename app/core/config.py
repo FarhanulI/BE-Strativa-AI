@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import os
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from dotenv import dotenv_values
 from pydantic import Field, SecretStr, model_validator
@@ -21,6 +25,61 @@ class ConfigurationError(RuntimeError):
     pass
 
 
+TEST_DB_MODES = ("neon", "local")
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_LOCAL_TEST_DATABASE = re.compile(r"[a-z][a-z0-9_]*_test")
+_POSTGRES_SCHEMES = ("postgres", "postgresql", "postgresql+asyncpg")
+
+
+@dataclass(frozen=True)
+class DatabaseTarget:
+    host: str | None
+    unix_socket: bool
+    database: str
+
+    @property
+    def is_local(self) -> bool:
+        return self.unix_socket or (self.host in LOOPBACK_HOSTS)
+
+
+def parse_database_target(url: str) -> DatabaseTarget:
+    """Extract the host kind and database name. Errors never echo the URL."""
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+        _ = parts.port
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    except ValueError:
+        raise ConfigurationError("Database URL is not a valid PostgreSQL URL") from None
+    if parts.scheme not in _POSTGRES_SCHEMES:
+        raise ConfigurationError("Database URL is not a valid PostgreSQL URL")
+    database = unquote(parts.path.lstrip("/"))
+    overridden = "hostaddr" in query or (host is not None and "host" in query)
+    if overridden:
+        return DatabaseTarget(host=None, unix_socket=False, database=database)
+    socket_dir = query.get("host")
+    unix_socket = host is None and socket_dir is not None and socket_dir.startswith("/")
+    return DatabaseTarget(host=host, unix_socket=unix_socket, database=database)
+
+
+def require_local_test_targets(urls: Sequence[str]) -> DatabaseTarget:
+    targets = [parse_database_target(url) for url in urls]
+    if not targets:
+        raise ConfigurationError("Local test database mode requires a database URL")
+    for target in targets:
+        if not target.is_local:
+            raise ConfigurationError(
+                "Local test database mode requires a loopback or unix-socket host"
+            )
+        if _LOCAL_TEST_DATABASE.fullmatch(target.database) is None:
+            raise ConfigurationError(
+                "Local test database mode requires a database name ending in _test"
+            )
+    if len(set(targets)) != 1:
+        raise ConfigurationError("Test database URLs must point at the same database")
+    return targets[0]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         case_sensitive=False,
@@ -34,6 +93,7 @@ class Settings(BaseSettings):
     database_url_direct: SecretStr | None = Field(default=None, repr=False)
     database_url_unpooled: SecretStr | None = Field(default=None, repr=False)
     neon_branch_name: str | None = None
+    test_db_mode: str = "neon"
     redis_url: SecretStr | None = Field(default=None, repr=False)
     log_level: str = "INFO"
     otel_exporter_otlp_endpoint: SecretStr | None = Field(default=None, repr=False)
@@ -51,8 +111,14 @@ class Settings(BaseSettings):
             if not env_file_was_provided and environment_override != AppEnvironment.PROD
             else {}
         )
+        requested_mode = str(
+            values.get("test_db_mode") or os.environ.get("TEST_DB_MODE") or "neon"
+        )
+        test_env_name = (
+            ".env.test.docker.local" if requested_mode == "local" else ".env.test.local"
+        )
         test_env = (
-            dotenv_values(root / ".env.test.local")
+            dotenv_values(root / test_env_name)
             if not env_file_was_provided and environment_override is None
             else {}
         )
@@ -67,7 +133,7 @@ class Settings(BaseSettings):
             if selected_env == AppEnvironment.DEV or selected_env == AppEnvironment.DEV.value:
                 env_files = (root / ".env", root / ".env.local")
             elif selected_env == AppEnvironment.TEST or selected_env == AppEnvironment.TEST.value:
-                env_files = (root / ".env", root / ".env.test.local")
+                env_files = (root / ".env", root / test_env_name)
             else:
                 env_files = ()
             values["_env_file"] = tuple(path for path in env_files if path.is_file())
@@ -82,6 +148,8 @@ class Settings(BaseSettings):
                     for path in values["_env_file"]
                 )
         super().__init__(**values)
+        if self.test_db_mode != requested_mode:
+            raise ConfigurationError("TEST_DB_MODE must be set in the process environment")
         if self.app_env in (AppEnvironment.TEST, AppEnvironment.PROD) and not explicit_app_env:
             raise ConfigurationError("APP_ENV=test or APP_ENV=prod must be explicitly provided")
 
@@ -99,7 +167,17 @@ class Settings(BaseSettings):
         elif direct_url is None:
             self.database_url_direct = unpooled_url
 
-        if self.database_url is not None or self.database_url_direct is not None:
+        if self.test_db_mode not in TEST_DB_MODES:
+            raise ConfigurationError("TEST_DB_MODE must be neon or local")
+        if self.test_db_mode == "local":
+            if self.app_env != AppEnvironment.TEST:
+                raise ConfigurationError("TEST_DB_MODE=local requires APP_ENV=test")
+            if self.neon_branch_name is not None:
+                raise ConfigurationError("NEON_BRANCH_NAME must not be set in local test mode")
+            urls = self.configured_database_urls()
+            if urls:
+                require_local_test_targets(urls)
+        elif self.database_url is not None or self.database_url_direct is not None:
             expected_branch = {
                 AppEnvironment.DEV: "dev",
                 AppEnvironment.TEST: "test",
@@ -110,6 +188,10 @@ class Settings(BaseSettings):
                     "NEON_BRANCH_NAME must match APP_ENV when a database URL is set"
                 )
         return self
+
+    def configured_database_urls(self) -> list[str]:
+        candidates = (self.database_url, self.database_url_direct, self.database_url_unpooled)
+        return [value.get_secret_value() for value in candidates if value is not None]
 
     @property
     def cors_origin_list(self) -> list[str]:

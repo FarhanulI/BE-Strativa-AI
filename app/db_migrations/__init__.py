@@ -6,7 +6,12 @@ from app.db_migrations.engine import (
     normalize_postgres_url,
     runtime_engine,
 )
-from app.db_migrations.guard import validate_migration_target
+from app.db_migrations.guard import (
+    confirm_local_test_database,
+    validate_migration_target,
+    validate_test_database_target,
+    verify_local_test_database,
+)
 from app.db_migrations.session import database_session, dispose_database
 
 __all__ = [
@@ -22,4 +27,7 @@ __all__ = [
     "runtime_engine",
     "validate_tenant_scope",
     "validate_migration_target",
+    "validate_test_database_target",
+    "confirm_local_test_database",
+    "verify_local_test_database",
 ]
