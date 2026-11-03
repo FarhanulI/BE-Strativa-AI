@@ -39,3 +39,19 @@ def test_invalid_thresholds_and_negative_counts_are_rejected() -> None:
         MaturityThresholds(cold_start_threshold=5, mature_threshold=5)
     with pytest.raises(ValueError):
         compute_stage(-1)
+
+def test_thresholds_come_from_typed_settings() -> None:
+    from app.core import Settings
+
+    settings = Settings(
+        _env_file=None, maturity_cold_start_threshold=2, maturity_mature_threshold=10
+    )
+    thresholds = MaturityThresholds.from_settings(settings)
+    assert (thresholds.cold_start_threshold, thresholds.mature_threshold) == (2, 10)
+
+
+def test_settings_reject_inverted_maturity_thresholds() -> None:
+    from app.core import ConfigurationError, Settings
+
+    with pytest.raises(ConfigurationError):
+        Settings(_env_file=None, maturity_cold_start_threshold=10, maturity_mature_threshold=10)

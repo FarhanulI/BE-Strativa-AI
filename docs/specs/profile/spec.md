@@ -30,7 +30,7 @@ Own the universal `ContentProfile` strategic root, its identity, optional busine
 
 - `ProfileService.get(ctx, profile_id)`, `.list(ctx, params, ...)`, and `.get_maturity(ctx, profile_id)` require `WorkspaceContext`; every query filters by both `ctx.workspace_id` and the requested ID.
 - `ProfileService.record_verified_performance(ctx, profile_id, delta, idempotency_key)` requires a positive delta and caller-provided UUID idempotency key. It uses `events_outbox.handle_once` with a fixed profile consumer name and the key as `EventEnvelope.event_id`; processed-key, count/stage update, audit, and any maturity event share the caller-owned transaction. No profile-owned idempotency table is added.
-- `compute_stage(verified_performance_count, thresholds)` is a deterministic pure function. Defaults: `cold_start` for counts below 5; `early_growth` for counts from 5 through 29; `mature` for counts of 30 or more. Thresholds are configurable and validated.
+- `compute_stage(verified_performance_count, thresholds)` is a deterministic pure function. Defaults: `cold_start` for counts below 5; `early_growth` for counts from 5 through 29; `mature` for counts of 30 or more. Thresholds are configurable and validated; they come from typed settings `MATURITY_COLD_START_THRESHOLD` (default 5) and `MATURITY_MATURE_THRESHOLD` (default 30) via `MaturityThresholds.from_settings`, and startup fails with `ConfigurationError` unless mature exceeds cold start.
 - The `profile` package exports its public services, role permission registration, typed contracts/events, and `register_routes(app)`. Other modules must not import profile persistence internals.
 - Profile mutations use the caller-owned async SQLAlchemy session; the module never commits a transaction itself.
 

@@ -10,6 +10,7 @@ from app.core import (
     Conflict,
     CursorParams,
     NotFound,
+    Settings,
     SystemClock,
     UUID7Factory,
     ValidationFailed,
@@ -25,7 +26,7 @@ from app.profile.events import (
     ProfileRestored,
     ProfileUpdated,
 )
-from app.profile.maturity import DEFAULT_THRESHOLDS, MaturityThresholds, compute_stage
+from app.profile.maturity import MaturityThresholds, compute_stage
 from app.profile.models import (
     ContentProfile,
     ProfileBusinessContext,
@@ -310,10 +311,11 @@ class ProfileService:
         delta: int,
         idempotency_key: UUID,
         *,
-        thresholds: MaturityThresholds = DEFAULT_THRESHOLDS,
+        thresholds: MaturityThresholds | None = None,
     ) -> ProfileMaturityResponse:
         if delta <= 0:
             raise ValidationFailed("Verified performance delta must be positive")
+        thresholds = thresholds or MaturityThresholds.from_settings(Settings())
         envelope = EventEnvelope(
             event_id=idempotency_key,
             event_type="profile.verified_performance_recorded",

@@ -2,19 +2,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.core import (
+    DEFAULT_MATURITY_COLD_START_THRESHOLD,
+    DEFAULT_MATURITY_MATURE_THRESHOLD,
+    Settings,
+)
 from app.profile.schemas import MaturityStage
 
 
 @dataclass(frozen=True)
 class MaturityThresholds:
-    cold_start_threshold: int = 5
-    mature_threshold: int = 30
+    cold_start_threshold: int = DEFAULT_MATURITY_COLD_START_THRESHOLD
+    mature_threshold: int = DEFAULT_MATURITY_MATURE_THRESHOLD
 
     def __post_init__(self) -> None:
         if self.cold_start_threshold < 0:
             raise ValueError("cold_start_threshold must not be negative")
         if self.mature_threshold <= self.cold_start_threshold:
             raise ValueError("mature_threshold must be greater than cold_start_threshold")
+
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> MaturityThresholds:
+        return cls(
+            cold_start_threshold=settings.maturity_cold_start_threshold,
+            mature_threshold=settings.maturity_mature_threshold,
+        )
 
 
 DEFAULT_THRESHOLDS = MaturityThresholds()

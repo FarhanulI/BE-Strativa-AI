@@ -1,5 +1,7 @@
 from app.core.clock import Clock, FakeClock, SystemClock
 from app.core.config import (
+    DEFAULT_MATURITY_COLD_START_THRESHOLD,
+    DEFAULT_MATURITY_MATURE_THRESHOLD,
     AppEnvironment,
     ConfigurationError,
     Settings,
@@ -33,6 +35,8 @@ from app.core.pagination import CursorPage, CursorParams
 from app.core.unit_of_work import UnitOfWork
 
 __all__ = [
+    "DEFAULT_MATURITY_COLD_START_THRESHOLD",
+    "DEFAULT_MATURITY_MATURE_THRESHOLD",
     "AggregateRoot",
     "AppEnvironment",
     "Clock",

@@ -25,6 +25,8 @@ class ConfigurationError(RuntimeError):
     pass
 
 
+DEFAULT_MATURITY_COLD_START_THRESHOLD = 5
+DEFAULT_MATURITY_MATURE_THRESHOLD = 30
 TEST_DB_MODES = ("neon", "local")
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _LOCAL_TEST_DATABASE = re.compile(r"[a-z][a-z0-9_]*_test")
@@ -101,6 +103,8 @@ class Settings(BaseSettings):
     auth_jwt_secret: SecretStr | None = Field(default=None, repr=False)
     embedding_dim: int | None = Field(default=None, gt=0)
     cors_origins: str = ""
+    maturity_cold_start_threshold: int = Field(default=DEFAULT_MATURITY_COLD_START_THRESHOLD, ge=0)
+    maturity_mature_threshold: int = Field(default=DEFAULT_MATURITY_MATURE_THRESHOLD, gt=0)
 
     def __init__(self, **values: Any) -> None:
         env_file_was_provided = "_env_file" in values
@@ -167,6 +171,8 @@ class Settings(BaseSettings):
         elif direct_url is None:
             self.database_url_direct = unpooled_url
 
+        if self.maturity_mature_threshold <= self.maturity_cold_start_threshold:
+            raise ConfigurationError("Maturity mature threshold must exceed cold start threshold")
         if self.test_db_mode not in TEST_DB_MODES:
             raise ConfigurationError("TEST_DB_MODE must be neon or local")
         if self.test_db_mode == "local":
