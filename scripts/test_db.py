@@ -4,12 +4,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from app.core.config import AppEnvironment, Settings
+from app.core.config import ConfigurationError, Settings
+from app.db_migrations import validate_test_database_target
 
-settings = Settings()
-if settings.app_env != AppEnvironment.TEST or settings.neon_branch_name != "test":
-    raise SystemExit("DB tests require APP_ENV=test and NEON_BRANCH_NAME=test")
-settings.require_database_url(direct=True)
+try:
+    validate_test_database_target(Settings())
+except ConfigurationError as error:
+    raise SystemExit(str(error)) from None
 raise SystemExit(
     subprocess.call(
         [sys.executable, "-m", "pytest", "-m", "db", *sys.argv[1:]],

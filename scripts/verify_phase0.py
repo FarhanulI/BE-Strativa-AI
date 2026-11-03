@@ -8,17 +8,15 @@ import httpx
 from sqlalchemy import text
 
 from app.api_contract import create_app
-from app.core import AppEnvironment, CursorPage, CursorParams, ProblemDetails, Settings
-from app.db_migrations import direct_engine
+from app.core import ConfigurationError, CursorPage, CursorParams, ProblemDetails, Settings
+from app.db_migrations import (
+    direct_engine,
+    validate_test_database_target,
+    verify_local_test_database,
+)
 
 
-async def verify() -> None:
-    settings = Settings()
-    if settings.app_env != AppEnvironment.TEST or settings.neon_branch_name != "test":
-        raise SystemExit(
-            "Phase 0 live verification requires APP_ENV=test and NEON_BRANCH_NAME=test"
-        )
-
+async def verify(settings: Settings) -> None:
     engine = direct_engine(settings)
     try:
         async with engine.connect() as connection:
@@ -65,6 +63,7 @@ async def verify() -> None:
     print(
         json.dumps(
             {
+                "mode": settings.test_db_mode,
                 "branch": settings.neon_branch_name,
                 "revision": revision,
                 "extensions": extensions,
@@ -79,4 +78,10 @@ async def verify() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(verify())
+    try:
+        configured = Settings()
+        validate_test_database_target(configured)
+        verify_local_test_database(configured)
+    except ConfigurationError as error:
+        raise SystemExit(str(error)) from None
+    asyncio.run(verify(configured))

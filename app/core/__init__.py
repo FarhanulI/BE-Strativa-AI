@@ -1,5 +1,11 @@
 from app.core.clock import Clock, FakeClock, SystemClock
-from app.core.config import AppEnvironment, ConfigurationError, Settings
+from app.core.config import (
+    AppEnvironment,
+    ConfigurationError,
+    Settings,
+    parse_database_target,
+    require_local_test_targets,
+)
 from app.core.context import (
     RequestContext,
     get_request_context,
@@ -58,6 +64,8 @@ __all__ = [
     "get_request_context",
     "problem_correlation_fields",
     "new_uuid7",
+    "parse_database_target",
+    "require_local_test_targets",
     "request_context_dependency",
     "reset_request_context",
     "set_request_context",
