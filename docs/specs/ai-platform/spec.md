@@ -1,6 +1,6 @@
 # AI Platform Module Specification
 
-Status: approved by owner (rev 3); implementation may start after prerequisite P-2. Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec.
+Status: approved by owner (rev 3); implementation may start after prerequisite P-2. Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec. (approved rev 3; schema correction applied)
 
 No provisional markers remain in rev 3, and section 19 has no open questions. Section 20 lists the decided items, the one prerequisite task (P-2), the operational prerequisites and the implementation inputs.
 
@@ -183,6 +183,8 @@ Indexes:
 Constraints:
 
 - `uq_ai_usage_records_request_attempt`: unique `(request_id, attempt_no)`.
+- `fk_ai_usage_records_workspace_id_workspaces`: `workspace_id` references `workspaces.id` ON DELETE CASCADE, the same foreign key as in 4.3.
+- `ck_ai_usage_records_scope`: `scope IN ('workspace','system')`.
 - `ck_ai_usage_records_scope_workspace`: same rule as 4.1.
 - `ck_ai_usage_records_status`, `ck_ai_usage_records_call_kind`, `ck_ai_usage_records_billing_mode`: value lists.
 - `ck_ai_usage_records_nonneg`: `reserved_micro_usd >= 0 AND cost_micro_usd >= 0 AND COALESCE(input_units,0) >= 0 AND COALESCE(output_units,0) >= 0`.
@@ -212,8 +214,11 @@ Indexes:
 
 Constraints:
 
+- `ck_ai_budget_periods_scope`: `scope IN ('workspace','system')`.
 - `ck_ai_budget_periods_scope_workspace`: same rule as 4.1.
 - `ck_ai_budget_periods_nonneg`: `limit_micro_usd >= 0 AND reserved_micro_usd >= 0 AND spent_micro_usd >= 0`.
+
+Note: `limit_micro_usd` has no database default. Its value always comes from configuration; the figures in the column notes are configuration defaults, not column defaults.
 
 Indexes:
 

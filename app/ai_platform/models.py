@@ -168,6 +168,7 @@ class AiUsageRecord(Base):
     __tablename__ = "ai_usage_records"
     __table_args__ = (
         UniqueConstraint("request_id", "attempt_no", name="uq_ai_usage_records_request_attempt"),
+        CheckConstraint("scope IN ('workspace','system')", name="scope"),
         CheckConstraint(SCOPE_WORKSPACE_RULE, name="scope_workspace"),
         CheckConstraint("status IN ('reserved','succeeded','failed','abandoned')", name="status"),
         CheckConstraint("call_kind IN ('generation','repair','embedding')", name="call_kind"),
@@ -236,6 +237,7 @@ class AiUsageRecord(Base):
 class AiBudgetPeriod(Base):
     __tablename__ = "ai_budget_periods"
     __table_args__ = (
+        CheckConstraint("scope IN ('workspace','system')", name="scope"),
         CheckConstraint(SCOPE_WORKSPACE_RULE, name="scope_workspace"),
         CheckConstraint(
             "limit_micro_usd >= 0 AND reserved_micro_usd >= 0 AND spent_micro_usd >= 0",

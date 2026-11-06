@@ -193,6 +193,9 @@ def upgrade() -> None:
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         _now_column("created_at"),
         sa.CheckConstraint(
+            "scope IN ('workspace','system')", name=op.f("ck_ai_usage_records_scope")
+        ),
+        sa.CheckConstraint(
             SCOPE_WORKSPACE_RULE, name=op.f("ck_ai_usage_records_scope_workspace")
         ),
         sa.CheckConstraint(
@@ -266,6 +269,9 @@ def upgrade() -> None:
         sa.Column("reconcile_mismatch_bucket", sa.DateTime(timezone=True), nullable=True),
         _now_column("created_at"),
         _now_column("updated_at"),
+        sa.CheckConstraint(
+            "scope IN ('workspace','system')", name=op.f("ck_ai_budget_periods_scope")
+        ),
         sa.CheckConstraint(
             SCOPE_WORKSPACE_RULE, name=op.f("ck_ai_budget_periods_scope_workspace")
         ),

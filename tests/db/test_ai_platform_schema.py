@@ -251,6 +251,7 @@ async def test_ai_requests_accept_the_valid_shapes(db_session: AsyncSession) -> 
 
 
 USAGE_VIOLATIONS: list[tuple[str, dict[str, Any]]] = [
+    ("ck_ai_usage_records_scope", {"scope": "bogus", "workspace_id": None}),
     ("ck_ai_usage_records_scope_workspace", {"scope": "workspace", "workspace_id": None}),
     ("ck_ai_usage_records_scope_workspace", {"scope": "system"}),
     ("ck_ai_usage_records_status", {"status": "weird", "finished_at": NOW}),
@@ -308,6 +309,7 @@ async def test_ai_usage_records_accept_valid_shapes(db_session: AsyncSession) ->
 
 
 BUDGET_VIOLATIONS: list[tuple[str, dict[str, Any], bool]] = [
+    ("ck_ai_budget_periods_scope", {"scope": "bogus"}, False),
     ("ck_ai_budget_periods_scope_workspace", {"scope": "workspace"}, False),
     ("ck_ai_budget_periods_scope_workspace", {"scope": "system"}, True),
     ("ck_ai_budget_periods_nonneg", {"limit_micro_usd": -1}, True),
@@ -520,6 +522,7 @@ EXPECTED_CONSTRAINTS = {
         *{
             f"ck_ai_usage_records_{name}"
             for name in (
+                "scope",
                 "scope_workspace",
                 "status",
                 "call_kind",
@@ -532,6 +535,7 @@ EXPECTED_CONSTRAINTS = {
     "ai_budget_periods": {
         "pk_ai_budget_periods",
         "fk_ai_budget_periods_workspace_id_workspaces",
+        "ck_ai_budget_periods_scope",
         "ck_ai_budget_periods_scope_workspace",
         "ck_ai_budget_periods_nonneg",
     },
