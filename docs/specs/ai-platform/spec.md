@@ -1,8 +1,8 @@
 # AI Platform Module Specification
 
-Status: approved by owner (rev 3); implementation may start after prerequisite P-2. Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec. (approved rev 3; schema correction applied)
+Status: approved by owner (rev 3); embedding model reopened (rev 4); awaiting final owner approval of rev 4. Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec. Revision 4 records the owner's reopened embedding decision (D-21): Perplexity `pplx-embed-v1-0.6b` through the hosted Perplexity API at its native 1024 dimensions replaces OpenAI `text-embedding-3-small`; it adds the embedding wire format (5.3), configurable embedding limits, four open questions (section 19) and verified implementation inputs (20.4). (approved rev 3; schema correction applied; rev 4 awaiting final approval)
 
-No provisional markers remain in rev 3, and section 19 has no open questions. Section 20 lists the decided items, the one prerequisite task (P-2), the operational prerequisites and the implementation inputs.
+No provisional markers remain in rev 3. Revision 4 leaves four undecided Open Questions in section 19 (OQ-1 to OQ-4), all about embeddings. Section 20 lists the decided items, the one prerequisite task (P-2), the operational prerequisites and the implementation inputs.
 
 ## Backend
 
@@ -14,7 +14,7 @@ It provides:
 
 - the AI Orchestrator (task execution, sync and async),
 - the AI Router (provider/model selection, fallback),
-- provider abstraction through LiteLLM (Gemini for chat, OpenAI only for text embeddings),
+- provider abstraction through LiteLLM (Gemini for chat, Perplexity only for text embeddings),
 - the task registry and the capability model (task ≠ capability),
 - strict output-schema enforcement,
 - cost metering and budget enforcement (a per-workspace budget and a separate system budget),
@@ -340,13 +340,13 @@ The orchestrator is therefore constructed with an `async_sessionmaker` (the same
 ### 5.3 Embeddings
 
 ```python
-EMBEDDING_MODEL: Final = "text-embedding-3-small"
+EMBEDDING_MODEL: Final = "pplx-embed-v1-0.6b"
 EMBEDDING_DIMENSIONS: Final = 1024
 EMBEDDING_VERSION: Final = "v1-d1024"
 
 class EmbeddingBatch(BaseModel):
     vectors: list[list[float]]         # len == len(texts); each len == 1024
-    embedding_model: str               # "text-embedding-3-small"
+    embedding_model: str               # "pplx-embed-v1-0.6b"
     embedding_version: str             # "v1-d1024"
     dimensions: int                    # 1024
     usage: AiUsageSummary
@@ -355,13 +355,15 @@ class EmbeddingService(Protocol):
     async def embed_texts(self, ctx: AiCallContext, texts: Sequence[str]) -> EmbeddingBatch: ...
 ```
 
-- The service rejects an empty batch, a batch larger than 128 texts, an empty text, or a text whose estimated input exceeds the model limit of 8,191 units, all with `ValidationFailed` (`ai_input_too_large` or `validation_failed`).
-- The model is OpenAI `text-embedding-3-small`, requested with `dimensions=1024`.
+- The service rejects an empty batch, a batch larger than `EMBED_MAX_BATCH` texts, an empty text, or a text whose estimated input exceeds `EMBED_MAX_TEXT_UNITS` units, all with `ValidationFailed` (`ai_input_too_large` or `validation_failed`). `EMBED_MAX_TEXT_UNITS` and `EMBED_MAX_BATCH` are `AiPlatformConfig` fields (environment `AI_EMBED_MAX_TEXT_UNITS`, `AI_EMBED_MAX_BATCH`). Their defaults are *to be filled at implementation from the official Perplexity embeddings API reference, with source URL and date* (20.4). No numeric limit is written in this spec, and tests use the configured values.
+- The model is Perplexity `pplx-embed-v1-0.6b` through the hosted Perplexity API (D-21). It is requested at its native 1024 dimensions. No truncation (`dimensions`) parameter is sent. `EMBEDDING_MODEL` is the stored model name, without the LiteLLM provider prefix; the prefix lives only in the catalog and the adapter (INV-3).
+- **Wire format (verified, 20.4).** The Perplexity embeddings API returns base64-encoded signed int8 values by default (`encoding_format` `base64_int8`; `base64_binary` also exists; no float32 option is documented). The adapter requests `base64_int8`, decodes it to signed integers and returns them as `float` values **without scaling or normalization**. If LiteLLM already returns decoded numbers, the adapter uses them as they are; the implementer verifies which. A response whose decoded length is not exactly 1024 is a provider error (`provider_bad_request`, no fallback). Provider usage fields are mapped to `input_units` at the adapter boundary only (the word `token` appears in no `ai_platform` name). LiteLLM reaches the model natively with the `perplexity/` prefix (for example `perplexity/pplx-embed-v1-0.6b`), so no OpenAI-compatible base URL workaround is needed.
+- The vectors are returned exactly as decoded. The distance metric and any normalization are open (OQ-1).
 - There is no fallback to another embedding model (INV-12). Vectors from different models or dimensions are not comparable.
 - `embedding_model` and `embedding_version` are what `rag` persists per chunk (§54).
 - If `Settings.embedding_dim` is set and is not 1024, `ai_platform` startup validation raises `ConfigurationError`.
 - It is a platform call (`EMBED_TEXT`). It is metered like any other call. A workspace context spends the workspace budget. A system context (for example GLOBAL knowledge) spends the system budget (12.3). It takes no idempotency key. It runs synchronously inside the caller's worker. `rag` owns the embedding job.
-- If the OpenAI key is absent, `embed_texts` raises `AiProviderNotConfigured` (a `ConfigurationError`) at call time (D-13).
+- If the Perplexity key is absent, `embed_texts` raises `AiProviderNotConfigured` (a `ConfigurationError`) at call time (D-13).
 
 ### 5.4 Errors (all `DomainError` subclasses unless noted; fixed `detail` strings, never provider or user text)
 
@@ -427,8 +429,8 @@ def register_routes(app) -> None: ...
 
 - `AiBudgetService` and `AiUsageService` take a workspace-scoped `AiCallContext`. Callers must already have passed the `ai:usage_read` check (section 15).
 - A domain module registers the output schema it owns with `OutputSchemaRegistry.register(...)` at startup. This is how a task becomes ready. `AiTaskRegistry` is owned by `ai_platform`.
-- `check_ai_providers` (D-13) is a presence-only readiness helper in the style of `check_database`/`check_redis`. It never calls a provider, performs no network access and reveals no key material. `capability="embedding"` is `ok` only when the OpenAI key is present. `capability="generation"` is `ok` when at least one enabled catalog provider with a generation-capable model has its key present (today only Gemini). `rag` may call it at startup. `ai_platform` itself never fails at startup for a missing key.
-- Provider API keys are read as `SecretStr` from LiteLLM's conventional environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`).
+- `check_ai_providers` (D-13) is a presence-only readiness helper in the style of `check_database`/`check_redis`. It never calls a provider, performs no network access and reveals no key material. `capability="embedding"` is `ok` only when the Perplexity key is present. `capability="generation"` is `ok` when at least one enabled catalog provider with a generation-capable model has its key present (today only Gemini). `rag` may call it at startup. `ai_platform` itself never fails at startup for a missing key.
+- Provider API keys are read as `SecretStr` from environment variables named as the providers' official documentation names them: `GEMINI_API_KEY` for Gemini. For Perplexity the two official sources differ: LiteLLM documents `PERPLEXITYAI_API_KEY` and Perplexity's own SDK documentation uses `PERPLEXITY_API_KEY`. Which name `ai_platform` reads is not decided here (OQ-3, 20.4).
 - `AiPlatformConfig` (`pydantic-settings`, env prefix `AI_`, owned by `ai_platform`, not core `Settings`) holds the budget limits (12.3), the content retention (8.3), the per-provider billing mode (`AI_GEMINI_BILLING_MODE`, 10.1) and the job tuning values. `build_ai_platform` builds it from the environment when none is passed and raises `ConfigurationError` on an invalid value.
 - `FakeAiProvider` and `ScriptedResponse` are exported from the package root for other modules' tests (the boundary test forbids `app.ai_platform.testing`-style deep imports). The fake records the exact provider request it received so tests can assert its shape (11.1).
 
@@ -445,7 +447,7 @@ def register_routes(app) -> None: ...
 
 ### 5.7 Notes for dependent modules
 
-- **`rag`.** The embedding job must treat `AiBudgetExceeded` as "defer and retry later", not as a dead-letter failure. The `rag` spec defines the exact behavior (delay, attempt accounting). Workspace-scope embeddings (WORKSPACE/PROFILE knowledge) draw on the workspace budget. GLOBAL knowledge embeddings draw on the system budget. A missing OpenAI key surfaces as `ConfigurationError` at call time. System-scope embeddings use `AiCallContext.system`, which only `rag` and `ai_platform` may build (D-15). `rag` may call `check_ai_providers(settings, capability="embedding")` at startup.
+- **`rag`.** The embedding job must treat `AiBudgetExceeded` as "defer and retry later", not as a dead-letter failure. The `rag` spec defines the exact behavior (delay, attempt accounting). Workspace-scope embeddings (WORKSPACE/PROFILE knowledge) draw on the workspace budget. GLOBAL knowledge embeddings draw on the system budget. A missing Perplexity key surfaces as `ConfigurationError` at call time. System-scope embeddings use `AiCallContext.system`, which only `rag` and `ai_platform` may build (D-15). `rag` may call `check_ai_providers(settings, capability="embedding")` at startup.
 - **Domain modules** own and version their prompts and their output schemas (D-6). They authorize the user for their own action before calling. On a user request path they may call `run` only for `interactive` tasks; everything else uses `submit` (D-7). An async request refused for budget ends `failed` with `error_code = budget_exceeded`.
 - **`context_engine`** supplies the context blocks. It must not rely on `ai_platform` to trim them.
 
@@ -629,7 +631,7 @@ Platform task (not in §44; added because §54 requires an embedding path):
 
 | Task | Capabilities | Output | Allowed scopes | Notes |
 | --- | --- | --- | --- | --- |
-| `EMBED_TEXT` | embedding | `EmbeddingBatch` (not a Pydantic task schema) | workspace, system | internal, used by `EmbeddingService` only. Pinned to OpenAI `text-embedding-3-small` at 1024 dimensions. No fallback. Cannot be requested through `AiTaskRequest`. Classes: quality `standard`, latency `standard` (60 s deadline), cost `low` (worst-case ceiling 20,000 micro-USD) (D-20). |
+| `EMBED_TEXT` | embedding | `EmbeddingBatch` (not a Pydantic task schema) | workspace, system | internal, used by `EmbeddingService` only. Pinned to Perplexity `pplx-embed-v1-0.6b` at its native 1024 dimensions (D-21). No fallback. Cannot be requested through `AiTaskRequest`. Classes: quality `standard`, latency `standard` (60 s deadline), cost `low` (worst-case ceiling 20,000 micro-USD) (D-20). |
 
 The Router applies the same filters and deadline logic to `EMBED_TEXT` as to every other task, except that its candidate list is the single pinned model (10.2 step 10) and there is no fallback (D-20).
 
@@ -649,12 +651,12 @@ The Router is a pure, deterministic function of `(task definition, request, cata
 ### 10.1 Model catalog
 
 - Versioned in-repo data (`catalog_version`, `price_version`).
-- Chat provider: **Gemini**, through LiteLLM (D-4). **OpenAI** is used only for `text-embedding-3-small` (1024 dimensions, `v1-d1024`). No OpenAI chat model and no Anthropic adapter is enabled. The catalog format and the adapter mapping accept further providers and models later, as a change inside `ai_platform` only, with no change to domain modules or to `AiTaskRequest`. With a single enabled chat provider, fallback happens only between enabled Gemini models of the same billing mode. If only one model is eligible there is no fallback.
+- Chat provider: **Gemini**, through LiteLLM (D-4). **Perplexity** is used only for `pplx-embed-v1-0.6b` (native 1024 dimensions, `v1-d1024`, D-21). OpenAI is not used by `ai_platform` at all. No OpenAI chat model and no Anthropic adapter is enabled. The catalog format and the adapter mapping accept further providers and models later, as a change inside `ai_platform` only, with no change to domain modules or to `AiTaskRequest`. With a single enabled chat provider, fallback happens only between enabled Gemini models of the same billing mode. If only one model is eligible there is no fallback.
 - Each model has: `provider`, `model`, `enabled`, `capabilities`, `input_modalities`, `output_modalities`, `quality_tier`, `context_window_units`, `max_output_units`, `supports_json_schema`, `latency_p50_ms` (static estimate), and integer prices `input_micro_usd_per_million_units` and `output_micro_usd_per_million_units`, plus `price_source_url` and `price_checked_on` (date). The catalog keeps capabilities, tiers, limits and list prices. It has **no** billing-mode field.
-- **Billing mode is a property of the provider credential, not of the model (D-19).** It is configured per provider in `AiPlatformConfig`: `AI_GEMINI_BILLING_MODE` = `free_tier` or `paid` (default `free_tier`). The OpenAI embedding credential is always `paid` and is not configurable. A value other than `free_tier` or `paid` raises `ConfigurationError` when the config is built. The Router derives each candidate's `billing_mode` from its provider's configuration, so the same model is `free_tier` or `paid` purely by configuration. Tests set modes for fake providers through the `config` argument of `build_ai_platform`.
+- **Billing mode is a property of the provider credential, not of the model (D-19).** It is configured per provider in `AiPlatformConfig`: `AI_GEMINI_BILLING_MODE` = `free_tier` or `paid` (default `free_tier`). The Perplexity embedding credential is always `paid` and is not configurable. A value other than `free_tier` or `paid` raises `ConfigurationError` when the config is built. The Router derives each candidate's `billing_mode` from its provider's configuration, so the same model is `free_tier` or `paid` purely by configuration. Tests set modes for fake providers through the `config` argument of `build_ai_platform`.
 - **Prices are not written in this spec.** They are stored in the in-repo catalog under a `price_version`. They are *to be filled at implementation, with source URL and date*, and must be verified against each provider's official pricing page at that time. Free-tier quotas and limits are not written here either. Which specific Gemini models fill each quality tier is an implementation input (20.4). Tests use a synthetic fake catalog with synthetic prices.
 - The catalog file, the provider adapter and the module configuration are the only places in the codebase that may contain provider or model identifiers (INV-3).
-- Provider API keys are read from environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`) as `SecretStr` and are never logged.
+- Provider API keys are read from environment variables (`GEMINI_API_KEY`; the Perplexity variable name is OQ-3 and 20.4) as `SecretStr` and are never logged.
 
 ### 10.2 Selection, in order
 
@@ -670,7 +672,7 @@ The Router is a pure, deterministic function of `(task definition, request, cata
    - `standard`: (estimated cost asc, `latency_p50_ms` asc, `model` asc)
    - `batch`: (estimated cost asc, `model` asc)
 9. **Billing-mode lock.** Keep only candidates whose `billing_mode` (derived from the provider's configuration, 10.1) equals that of the first-ranked candidate. The rest get reason code `billing_mode`. The request never uses a candidate of the other billing mode, so a `free_tier` request never falls back to a `paid` candidate, and the reverse (INV-29).
-10. If no candidate remains and the cause was not budget, context or missing provider keys, raise `AiNoRoute`. For embeddings the candidate list is exactly the pinned model, or `AiNoRoute` if it is unavailable.
+10. If no candidate remains and the cause was not budget, context or missing provider keys, raise `AiNoRoute`. For embeddings the candidate list is exactly the pinned model (`pplx-embed-v1-0.6b`), or `AiNoRoute` if it is unavailable.
 
 Quality is a floor, not an objective. Among eligible models the cheapest (or, for `interactive`, the fastest) wins. This keeps selection simple and predictable (§62).
 
@@ -888,7 +890,7 @@ Minimal and read-only. It is justified because budget enforcement (80 % warning,
 9. **INV-9.** Total calls per request never exceed `max_provider_attempts × (1 + max_repair_attempts)`.
 10. **INV-10.** For any budget row, `spent_micro_usd + reserved_micro_usd` exceeds the limit in force at the time of a reservation only through the settlement of a call whose actual cost exceeded its reservation. A reservation never pushes it over the limit passed with it (verified under concurrency).
 11. **INV-11.** A call reserves against exactly one budget row, chosen by scope: the workspace row for a workspace-scope call, the system row for a system-scope call. A workspace-scope call never reads, reserves against, settles against or modifies the system row, and a system-scope call never modifies a workspace row.
-12. **INV-12.** An embedding call uses `text-embedding-3-small` at 1024 dimensions. A result always reports `embedding_version = "v1-d1024"`, 1024-length vectors and the pinned model. There is no fallback model for embeddings.
+12. **INV-12.** An embedding call uses `pplx-embed-v1-0.6b` at its native 1024 dimensions. A result always reports `embedding_version = "v1-d1024"`, 1024-length vectors and the pinned model. There is no fallback model for embeddings.
 13. **INV-13.** For any budget row with `reserved_micro_usd = 0`, `spent_micro_usd` equals the sum of `cost_micro_usd` of the matching usage records.
 14. **INV-14.** Cost never undercounts. A cost is rounded up, and an abandoned reservation is charged at its estimate.
 15. **INV-15.** `ai.budget_threshold_reached` is published at most once per budget row and period, and only from a settlement transaction, when settled `spent_micro_usd` first reaches 80 % of the limit (reservations alone never trigger it). `ai.budget_exhausted` is published at most once per budget row and period, on the first refusal, even under concurrent calls.
@@ -925,9 +927,10 @@ Fake-provider tests (AC-1 to AC-53 and AC-58) run by default on a local Postgres
 7. **AC-7.** Settings and config validation:
    - `Settings(embedding_dim=1024)` is accepted, any other positive `embedding_dim` makes `build_ai_platform` raise `ConfigurationError`, and an unset value is accepted.
    - `AiPlatformConfig` defaults are workspace limit 25,000,000 micro-USD, system limit 100,000,000 micro-USD, retention 30 days and `AI_GEMINI_BILLING_MODE` `free_tier`. The conversion uses `Decimal` (for example `AI_WORKSPACE_MONTHLY_BUDGET_USD=12.345678` gives 12,345,678). Negative, non-numeric, non-finite and more-than-6-decimal values raise `ConfigurationError`. `sync_stale_after` not greater than the longest latency deadline raises `ConfigurationError`.
+   - `EMBED_MAX_TEXT_UNITS` and `EMBED_MAX_BATCH` are positive integers (defaults filled at implementation, 20.4). A non-positive or non-integer value raises `ConfigurationError`. Tests read the configured values and never hard-code a number.
    - Provider key values never appear in `repr`, logs or errors.
 8. **AC-8.** Missing provider keys (D-13). `build_ai_platform` succeeds with no keys.
-   - With the OpenAI key absent, `embed_texts` raises `AiProviderNotConfigured` (a `ConfigurationError`) at call time.
+   - With the Perplexity key absent, `embed_texts` raises `AiProviderNotConfigured` (a `ConfigurationError`) at call time.
    - With the Gemini key absent, a generation call raises `AiProviderNotConfigured`, not `AiNoRoute`.
    - With a fake catalog and only one provider's key present, the Router excludes the other provider's models with reason `not_configured` and routes to the configured one.
    - `check_ai_providers` returns `ok` or `not_configured` accordingly, makes no network call and reveals no key material.
@@ -1020,20 +1023,20 @@ Fake-provider tests (AC-1 to AC-53 and AC-58) run by default on a local Postgres
     - `get_status` and `get_output` with another workspace's request id raise `NotFound`.
     - System-scope rows are absent from workspace reports.
     - Captured logs, events, audit rows, job payloads and error responses of a full run (success, schema failure, budget refusal) contain none of the test prompt, completion or output strings and no `token`-named key (INV-18, INV-19, INV-20).
-53. **AC-53.** `embed_texts` with the fake provider returns vectors of length 1024, `embedding_model="text-embedding-3-small"`, `embedding_version="v1-d1024"`, and records usage against the budget row of the context's scope. Empty batches, oversize batches and oversize texts are rejected, and there is no fallback model (INV-12). The embedding call carries a 60 s deadline (D-20).
+53. **AC-53.** `embed_texts` with the fake provider returns vectors of length 1024, `embedding_model="pplx-embed-v1-0.6b"`, `embedding_version="v1-d1024"`, and records usage against the budget row of the context's scope. Empty batches, batches larger than the configured `EMBED_MAX_BATCH`, empty texts and texts over the configured `EMBED_MAX_TEXT_UNITS` are rejected, and there is no fallback model (INV-12). The fake provider path also covers the wire format (5.3): a response whose decoded length is not 1024 ends the call as `provider_bad_request` with no fallback, and the returned vectors are exactly the decoded values (no scaling, no normalization). The embedding call carries a 60 s deadline (D-20).
 58. **AC-58.** Lock order (INV-32, 12.3). With committed sessions, concurrent fenced settlements, reaper abandon statements and budget refusals run against the same request, usage and budget rows, repeated over many iterations. The test asserts that no deadlock or serialization failure occurs, that every settlement and abandon applies at most once, and that the INV-13 query (AC-36) holds for the budget rows afterwards.
 
 ### 17.6 Real-provider smoke test (separate, small)
 
 Marker `ai_live`. It is excluded from `scripts/check.py` and from `just test-db`, and it only runs when `AI_LIVE_TESTS=1` and the needed provider key is present in the ignored `.env.test.local`. It runs against the test database. Keys never appear in output.
 
-Operational prerequisites (not code, section 20.3): a dedicated Google project with billing disabled for the Gemini key; a dedicated OpenAI test key with a provider-side hard spend limit (D-16). The tests send **synthetic text only**, never real user data. The Gemini free tier may allow the provider to use submitted content. The owner must verify Google's current terms before any real user content is ever sent to it.
+Operational prerequisites (not code, section 20.3): a dedicated Google project with billing disabled for the Gemini key; a dedicated Perplexity test API key whose prepaid balance, with auto-recharge OFF, is the provider-side spend limit (D-16). The tests send **synthetic text only**, never real user data. The Gemini free tier may allow the provider to use submitted content. The owner must verify Google's current terms before any real user content is ever sent to it.
 
 54. **AC-54.** *Spend cap (INV-27, D-11).* The 20 USD total across all test runs is enforced by two controls:
-    - a provider-side hard spend limit on the dedicated paid-provider test key (the one control the code cannot bypass), and a Google project with billing disabled;
+    - a provider-side hard spend limit on the dedicated paid-provider test key (the one control the code cannot bypass; for the Perplexity key this is the prepaid balance with auto-recharge OFF), and a Google project with billing disabled;
     - a cumulative counter kept **outside the test database transaction**, in a git-ignored local ledger file (the implementation adds it to `.gitignore`). After each real call the fixture adds the catalog-computed cost in integer micro-USD. Before each real call the fixture aborts the test if the cumulative total plus that call's worst-case estimate would pass 20 USD, and a per-session guard aborts the remaining tests if the session total passes 2 USD.
     The suite documents the key it expects and never uses a production key. It is designed to cost far below 1 USD: at most 3 provider calls, `max_output_units ≤ 300`, and texts of at most a few sentences.
-55. **AC-55.** One real `embed_texts` call over 3 short synthetic strings returns 3 vectors of length 1024, `embedding_version="v1-d1024"`, usage > 0 and cost > 0 in the ledger. It uses the dedicated OpenAI test key with a provider-side hard spend limit (D-16).
+55. **AC-55.** One real `embed_texts` call over 3 short synthetic strings returns 3 vectors of length 1024, `embedding_version="v1-d1024"`, usage > 0 and cost > 0 in the ledger. It uses the dedicated Perplexity test key whose prepaid balance, with auto-recharge OFF, is the spend limit (D-16).
 56. **AC-56.** One real task call through the Router with Gemini (a cheap `interactive` task using a test-only schema) returns a strictly valid output, writes a ledger row whose recorded cost matches the catalog formula for the provider-reported units, and increases the workspace budget's `spent`. A quota-exhausted response from the free tier is a failed attempt (`provider_rate_limited`) and never triggers a paid call.
 57. **AC-57.** The same run's captured logs contain no prompt or completion text and no key (INV-18, INV-20). The test fails if the output contains the sentinel strings used in the prompt.
 
@@ -1082,7 +1085,8 @@ Operational prerequisites (not code, section 20.3): a dedicated Google project w
 - Storing embeddings or chunks, and the embedding job itself (`rag`).
 - Domain output schema bodies and domain prompt content (the owning modules; D-6).
 - Tool or function calling.
-- Enabling an OpenAI chat model or an Anthropic adapter. The catalog format allows adding them later (10.1).
+- Enabling an OpenAI chat model or an Anthropic adapter, and using OpenAI for anything (embeddings use Perplexity only, D-21). The catalog format allows adding chat providers later (10.1).
+- Any fallback embedding model or fallback embedding price (INV-12).
 - Falling back from a `free_tier` model to a `paid` model, or switching billing mode (INV-29).
 - Real image, video or audio adapters, models or tasks. Media storage (`content_asset`).
 - Streaming partial output to clients (D-12).
@@ -1097,11 +1101,33 @@ Operational prerequisites (not code, section 20.3): a dedicated Google project w
 
 ## 19. Open Questions
 
-None. The questions of revision 2 are decided (D-16 to D-18) or moved to implementation inputs (20.4). Any gap found later is added here with options and a recommendation, undecided.
+The questions of revisions 1 to 3 are decided (D-16 to D-18) or moved to implementation inputs (20.4). Revision 4 numbers its own questions OQ-1 to OQ-4 (earlier "was OQ-n" notes in section 20 refer to earlier revisions). All four are undecided. Any gap found later is added here with options and a recommendation.
+
+**OQ-1. Distance metric and normalization for embeddings.** The Perplexity API returns unnormalized embeddings.
+- Option A: store the vectors as returned and use cosine distance.
+- Option B: L2-normalize in `EmbeddingService`.
+- Option C: leave the choice to `rag`.
+- **Recommendation:** `ai_platform` returns the vectors exactly as decoded (no normalization), and the `rag` spec chooses cosine distance (no normalization needed) or normalizes itself.
+
+**OQ-2. Perplexity terms and privacy for submitted content.** The current Perplexity terms of service and any data processing addendum are unverified.
+- Option A: the owner verifies them before any real user content is sent (same note as 20.3).
+- Option B: the owner verifies them before any real content, and only synthetic text is used until then.
+- **Recommendation:** Option A. This spec makes no claim about retention or training.
+
+**OQ-3. Name of the Perplexity key variable.** LiteLLM documents `PERPLEXITYAI_API_KEY`; Perplexity's own SDK documentation uses `PERPLEXITY_API_KEY` (20.4).
+- Option A: read the name LiteLLM documents.
+- Option B: read the name Perplexity's SDK documents.
+- Option C: accept either, with a fixed precedence.
+- **Recommendation:** Option A, because the adapter calls Perplexity through LiteLLM; the owner confirms at implementation.
+
+**OQ-4. Combined per-request input limit.** The Perplexity reference documents a limit on the total input of one request, in addition to the per-text and per-batch limits (20.4). Section 5.3 defines only `EMBED_MAX_TEXT_UNITS` and `EMBED_MAX_BATCH`, so a batch within both limits could still be refused by the provider (`provider_bad_request`).
+- Option A: add a third `AiPlatformConfig` value, for example `EMBED_MAX_BATCH_UNITS`, checked before the call (`ai_input_too_large`).
+- Option B: leave it to the caller (`rag`) to size batches, and treat a provider refusal as `provider_bad_request`.
+- **Recommendation:** Option A, so the rejection happens before routing and leaves no row.
 
 ## 20. Decisions
 
-The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13 were Open Questions in the first draft (the former number is shown). Revision 2 changed D-2, D-4, D-5, D-9 and D-11, and added D-14 and D-15 (their "was OQ" numbers are first-draft numbers). Revision 3 changed D-4 and added D-16 to D-19 (D-16 to D-18 were the open questions OQ-2 to OQ-4 of revision 2).
+The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13 were Open Questions in the first draft (the former number is shown). Revision 2 changed D-2, D-4, D-5, D-9 and D-11, and added D-14 and D-15 (their "was OQ" numbers are first-draft numbers). Revision 3 changed D-4 and added D-16 to D-19 (D-16 to D-18 were the open questions OQ-2 to OQ-4 of revision 2). Revision 4 changed D-4 and D-16 and added D-21.
 
 ### 20.1 Decisions
 
@@ -1110,7 +1136,7 @@ The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13
 | D-1 (new) | The 100 USD system budget is a separate budget used only by system-scope calls (for example embedding GLOBAL knowledge). Workspace-scope calls count only against their own 25 USD workspace budget and never touch the system row. | Tenant spend cannot drain platform-level work, and a call reserves against one row, which removes double reservation and lock ordering. |
 | D-2 (was OQ-1; rev 2) | No generic scheduler is built. An external cron runs `python -m app.ai_platform.cron <reap\|reconcile\|purge>`, which enqueues the matching job with a UTC bucket (minute for reap, hour for reconcile and purge). Jobs are idempotent per bucket and safe under concurrent runs. A generic scheduler in `jobs_workers` stays a documented future option, not a prerequisite. | It avoids a new platform component before it is needed, and idempotent bucketed jobs make an external trigger safe. |
 | D-3 (was OQ-2) | The budget period is the UTC calendar month for both budgets, with no carry-over. | Simple, deterministic with `Clock`, and it matches the monthly wording. |
-| D-4 (was OQ-3; rev 2) | Chat uses **Gemini only**, through LiteLLM. OpenAI is used **only** for `text-embedding-3-small` (1024 dimensions, `v1-d1024`). No OpenAI chat model and no Anthropic adapter is enabled, and the catalog format allows adding them later without domain changes. Billing mode is a property of the provider credential, not of the model (D-19). The Router never falls back from a `free_tier` candidate to a `paid` candidate and never switches billing mode, and a quota-exhausted response is a failed attempt (`provider_rate_limited`). Prices live in the in-repo catalog with `price_version`, are verified against the provider's official pages at implementation time, and are not written in this spec. | A single chat provider keeps the first release small, a free-to-paid switch could create spend nobody approved, and prices from memory would go stale. |
+| D-4 (was OQ-3; rev 2; changed rev 4) | Chat uses **Gemini only**, through LiteLLM. Embeddings use Perplexity `pplx-embed-v1-0.6b` (native 1024 dimensions, `v1-d1024`, D-21), and OpenAI is not used by `ai_platform`. No OpenAI chat model and no Anthropic adapter is enabled, and the catalog format allows adding them later without domain changes. Billing mode is a property of the provider credential, not of the model (D-19). The Router never falls back from a `free_tier` candidate to a `paid` candidate and never switches billing mode, and a quota-exhausted response is a failed attempt (`provider_rate_limited`). Prices live in the in-repo catalog with `price_version`, are verified against the provider's official pages at implementation time, and are not written in this spec. | A single chat provider keeps the first release small, a free-to-paid switch could create spend nobody approved, and prices from memory would go stale. |
 | D-5 (was OQ-4; rev 2) | Stored async input/output content is purged **30 days** after completion by `ai_platform.purge_expired_content` v1, configured by `AI_ASYNC_CONTENT_RETENTION_DAYS` (default 30). Database backup and WAL retention are outside application control and must be reviewed against the privacy policy before production. | A bounded retention window limits stored user content while keeping the metadata needed for accounting, and backups are an operational concern the code cannot enforce. |
 | D-6 (was OQ-5) | Domain modules own and version their prompts. `ai:usage_read` is for OWNER and ADMIN only. | Prompts encode domain knowledge, and cost visibility is a management concern. |
 | D-7 (was OQ-6) | `run()` is allowed from a user request path only for `interactive` tasks. Otherwise it raises `ValidationFailed` with a fixed message. | Long AI work must not block API requests (§53). |
@@ -1122,11 +1148,12 @@ The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13
 | D-13 (was OQ-12) | A missing provider key raises `ConfigurationError` (`AiProviderNotConfigured`) at call time. A readiness helper (`check_ai_providers`) is exported for `rag` to call at startup. In an async job a missing key ends the request `failed` with `provider_not_configured` and is not retried. | It matches core's "fail at the point of use" configuration philosophy, and a retry cannot fix a missing key. |
 | D-14 (was OQ-2 of rev 1) | `submit` makes an advisory budget pre-check and raises `AiBudgetExceeded` when the budget step removes the last candidate. The atomic reservation at execution stays the authority. | The user learns immediately instead of waiting for a failed job, while one authority prevents disagreement. |
 | D-15 (was OQ-3 of rev 1) | System scope is allowed only for `EMBED_TEXT`. Widening it needs a spec change. Only code under `app/ai_platform/` and `app/rag/` may construct a system `AiCallContext`, enforced by an architecture test. | A system context has no workspace, so unrestricted use would let a feature bypass its workspace budget. |
-| D-16 (was OQ-2, rev 2) | The real embedding smoke test (AC-55) uses a dedicated OpenAI test key with a provider-side hard spend limit. | It tests the one real embedding path whose model and dimension are fixed, and the provider-side limit is the control the code cannot bypass. |
+| D-16 (was OQ-2, rev 2; changed rev 4, D-21) | The real embedding smoke test (AC-55) uses a dedicated Perplexity API key. Because Perplexity bills from prepaid credits, the prepaid balance with auto-recharge OFF is the provider-side spend limit (an operational prerequisite, 20.3). | It tests the one real embedding path whose model and dimension are fixed, and the provider-side limit is the control the code cannot bypass. |
 | D-17 (was OQ-3, rev 2) | `ON DELETE CASCADE` stays on the `ai_*` foreign keys for now. Hard deletion and export belong to `security_compliance`, which will choose between `SET NULL` and an archive. | Workspace deletion is soft today, so nothing in this phase deletes these rows, and the retention policy for hard deletion is not an `ai_platform` decision. |
 | D-18 (was OQ-4, rev 2) | `warning_notified_at` and `exhausted_notified_at` are never reset and only control event publication. `GET /budget` `state` is computed from the current limit: `exhausted` when `spent + reserved >= limit`, `warning` when `spent * 100 >= 80 * limit`, else `ok`. | Events stay once per period (INV-15), and the user sees a state that matches the limit in force. |
-| D-19 (new, rev 3) | Billing mode is a property of the provider credential, not of the model. `AI_GEMINI_BILLING_MODE` = `free_tier` or `paid` (default `free_tier`); the OpenAI embedding credential is always `paid`. The catalog has no billing-mode field. The Router derives each candidate's mode from provider configuration. `cost_micro_usd` is the metered cost at the catalog list price for both modes: the application's accounting figure for budgets and the test guards, not the provider's invoice. | Free or paid is decided by how the credential's project is billed, not by the model, and one accounting figure keeps budgets and guards comparable across modes. |
+| D-19 (new, rev 3) | Billing mode is a property of the provider credential, not of the model. `AI_GEMINI_BILLING_MODE` = `free_tier` or `paid` (default `free_tier`); the Perplexity embedding credential is always `paid`. The catalog has no billing-mode field. The Router derives each candidate's mode from provider configuration. `cost_micro_usd` is the metered cost at the catalog list price for both modes: the application's accounting figure for budgets and the test guards, not the provider's invoice. | Free or paid is decided by how the credential's project is billed, not by the model, and one accounting figure keeps budgets and guards comparable across modes. |
 | D-20 (new) | `EMBED_TEXT` carries the classes quality `standard`, latency `standard` (60 s deadline) and cost `low` (worst-case ceiling 20,000 micro-USD). The Router applies the same filters and deadline logic to it as to other tasks, except that the candidate list is the single pinned model (10.2 step 10) and there is no fallback. | Every routed call needs a deadline and a cost ceiling, and `sync_stale_after` assumes the longest deadline is 300 s. |
+| D-21 (new, rev 4) | The embedding model is Perplexity `pplx-embed-v1-0.6b` through the hosted Perplexity API at its native 1024 dimensions, replacing OpenAI `text-embedding-3-small`. `embedding_version` stays `v1-d1024` (nothing has been embedded yet; the model name is stored separately). Chat stays Gemini only. There is no fallback embedding model (INV-12). | The owner reopened the embedding choice; nothing has been embedded, so switching now costs no re-embedding. |
 
 Review fixes F-1 to F-6 are applied in sections 4, 5, 7, 11, 12, 16 and 17, and the fixed decisions listed in F-6 are unchanged. Revision 2 also applies three review items: lease fencing (E-1, 8.1, INV-28), the budget reconciliation job (E-2, 8.4, INV-30) and the error classification table (E-3, 10.3). Revision 3 adds precision fixes for abandoned-record accounting (8.2, 12.1) and the identifier-type boundary note (5.1).
 
@@ -1140,16 +1167,27 @@ There is no scheduler prerequisite (D-2).
 
 - An external cron is configured to run the three CLI commands in 8.5 at the cadence given there.
 - A dedicated Google project with billing disabled exists for the real-provider tests.
-- A dedicated OpenAI test key exists with a provider-side hard spend limit (D-16).
+- A dedicated Perplexity API key exists for the real embedding test (D-16). Perplexity bills from prepaid credits, so the prepaid balance with auto-recharge OFF is the provider-side spend limit. Auto-recharge must stay off on that account.
 - The billing mode configured for a provider (`AI_GEMINI_BILLING_MODE`) must match the real billing state of the Google project that owns the key. A mismatch is an operator error that the application cannot detect.
 - Before production, database backup and WAL / point-in-time-recovery retention are reviewed against the privacy policy (8.3).
 - Before any real user content is sent to the Gemini free tier, the owner verifies Google's current terms on use of submitted content.
+- Before any real user content is sent to Perplexity for embedding, the owner verifies Perplexity's current terms and any data processing addendum (OQ-2). This spec makes no claim about retention or training.
 
 ### 20.4 Implementation inputs
 
 These are not spec blockers. They are inputs the owner supplies at implementation time.
 
 - **Gemini models per quality tier.** The owner names the Gemini models for each tier at implementation time against Google's current official documentation (model list, context window, price, free-tier terms and quotas). The catalog records the source URL and the date for each. No prices or limits are written from memory, in this spec or in the catalog.
+- **Perplexity embedding inputs.** The owner supplies, from the official Perplexity and LiteLLM documentation: the exact API model identifier, the key variable name, the per-text and per-batch limits (`EMBED_MAX_TEXT_UNITS`, `EMBED_MAX_BATCH`, and the combined per-request limit of OQ-4), the rate limits, the price per million units, the source URL and the date. The catalog records them, and no price or numeric limit is written in this spec. There is no fallback embedding model and no fallback price (INV-12).
+- **Verified facts (format and identifiers only), verified on 2026-11-09** against `https://docs.perplexity.ai/docs/embeddings/quickstart`, `https://docs.perplexity.ai/docs/embeddings/standard-embeddings`, `https://docs.perplexity.ai/api-reference/embeddings-post`, `https://docs.litellm.ai/docs/providers/perplexity_embedding` and `https://huggingface.co/perplexity-ai/pplx-embed-v1-0.6b`:
+  - The API model identifier is `pplx-embed-v1-0.6b` (the endpoint is `POST /v1/embeddings`). Its native output is 1024 dimensions.
+  - `encoding_format` accepts `base64_int8` (the default, signed int8) and `base64_binary` (packed bits). No float option is documented. The Perplexity quickstart and the model card say the embeddings are unnormalized and to compare `base64_int8` embeddings by cosine similarity (OQ-1).
+  - The API has an optional `dimensions` (Matryoshka truncation) parameter. This spec does not use it (5.3).
+  - Empty input strings are not allowed. Per-text, per-request and total-input limits exist (OQ-4). Values come from the reference when the implementation fills the config.
+  - The response has a usage block with the provider's own usage field names and a provider-reported cost. They are mapped to `input_units` at the adapter boundary only. `cost_micro_usd` stays the catalog-priced figure (D-19).
+  - Key variable: LiteLLM documents `PERPLEXITYAI_API_KEY`; Perplexity's own SDK documentation uses `PERPLEXITY_API_KEY`. The two differ and this spec does not decide (OQ-3).
+  - LiteLLM reaches the model natively with the model name prefix `perplexity/` (for example `perplexity/pplx-embed-v1-0.6b`), so no OpenAI-compatible base URL workaround is needed. To be re-confirmed against the installed LiteLLM version.
+  - **Not verified:** rate limits (no page states them); whether LiteLLM decodes the base64 itself or returns the raw base64 string (the LiteLLM page does not say; the implementer checks, 5.3); LiteLLM's response usage field names.
 
 ## Frontend
 
