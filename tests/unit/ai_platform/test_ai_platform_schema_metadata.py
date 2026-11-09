@@ -34,8 +34,8 @@ def test_money_columns_are_bigint_micro_usd() -> None:
             assert Base.metadata.tables[table].c[column].type.__class__.__name__ == "BigInteger"
 
 
-def test_package_exports_nothing_public_yet() -> None:
-    assert ai_platform.__all__ == []
+def test_package_does_not_export_orm_models() -> None:
+    assert not {"AiRequest", "AiUsageRecord", "AiBudgetPeriod"} & set(ai_platform.__all__)
 
 
 def test_alembic_has_a_single_head_after_profile() -> None:
