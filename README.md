@@ -108,6 +108,8 @@ uv run python scripts/test_db.py                        # just test-db-local
 docker rm -f strativa-test-db                           # just test-db-down (data is on tmpfs)
 ```
 
+`APP_ENV=test` must be exported in the process environment, not only present in `.env.test.docker.local`. The entry guard and most DB tests load that file, but tests that build `Settings(_env_file=None)` (the auth, workspace and profile API tests, 13 in all) read only the process environment and fail with `TEST_DB_MODE=local requires APP_ENV=test` if it is missing. The guard is correct to refuse.
+
 SQLite is never a substitute. Tests never run against the dev or production databases. A scheduled nightly run on the Neon `test` branch is planned as a later delivery-phase job and is not defined yet.
 
 See `docs/specs/` for module specs and `docs/reports/phase0-verification.md` for verification commands.
