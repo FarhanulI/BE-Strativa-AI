@@ -204,7 +204,7 @@ Indexes:
 | `scope` | text not null | `workspace` \| `system` |
 | `workspace_id` | uuid null | same rule and FK as 4.1 |
 | `period_start` | date not null | first day of the UTC calendar month (D-3) |
-| `limit_micro_usd` | bigint not null | the configured limit last seen by a reservation, refusal or settlement on this row, kept for display and history. It is **not** the enforcement value: every reservation receives the current configured limit as a parameter (12.3, D-9). Defaults 25,000,000 (workspace) and 100,000,000 (system). |
+| `limit_micro_usd` | bigint not null | the configured limit last seen by a reservation, refusal or settlement on this row, kept for display and history. It is **not** the enforcement value: every reservation receives the current configured limit as a parameter (12.3, D-9). The configured defaults are 25,000,000 (workspace, `AI_WORKSPACE_MONTHLY_BUDGET_USD`) and 100,000,000 (system, `AI_SYSTEM_MONTHLY_BUDGET_USD`); these are configuration defaults, not column defaults, and the column has no database default. |
 | `reserved_micro_usd` | bigint not null default 0 | in-flight worst-case estimates |
 | `spent_micro_usd` | bigint not null default 0 | settled actual cost |
 | `warning_notified_at` | timestamptz null | set once when settled `spent` first reaches 80 % of `limit` |
