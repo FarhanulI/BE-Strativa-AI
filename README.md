@@ -36,6 +36,8 @@ Generate the secret with:
 uv run python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
+Every variable added to `.env.example` must also be added to `.env.local` in the same change. Run `just sync-env` (`scripts/sync_env_local.py`) to append the missing names as placeholders; it never changes existing lines and prints names only.
+
 Keys are listed in `.env.example`. Never commit populated env files. `NEON_BRANCH_NAME` must match `APP_ENV` (`dev`, `test`, `production`).
 
 ## Start Redis
@@ -92,6 +94,7 @@ Restart the server after changing env files.
 | `just test-db` | Run DB tests in Neon mode (needs `.env.test.local`, `APP_ENV=test`) |
 | `just test-db-up` / `just test-db-local` / `just test-db-down` | Start, use and remove the local Docker test database (`TEST_DB_MODE=local`) |
 | `just openapi` | Regenerate `openapi.json` |
+| `just sync-env` | Append names missing from `.env.local` that exist in `.env.example` (names only, never values) |
 
 ## Test database modes
 
