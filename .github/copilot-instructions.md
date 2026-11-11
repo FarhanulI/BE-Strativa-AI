@@ -23,3 +23,13 @@
 - Add focused tests for the changed module and its public contract; add tenant-isolation or end-to-end coverage when a change crosses those boundaries.
 - Follow existing repository tooling and conventions. Do not invent build/test commands when none are documented; report checks that could not be run.
 - Keep changes minimal and update the architecture or module documentation when behavior or contracts change.
+
+## Standing rules (owner)
+
+- `docs/specs/` are the source of truth. Every module goes spec, implement, verify. Stop for owner review after each step. One agent at a time on a working copy. Commit and push after every step.
+- Never run destructive commands (`rm -rf`, `git clean`, force push, dropping databases) without asking the owner.
+- Event payload keys never contain the word "token". No prompts, completions or user content in logs, events or error messages.
+- Tests run on a local Postgres container by default (`TEST_DB_MODE=local`, `APP_ENV=test`) and on the Neon test branch nightly. Never run tests against dev or production. SQLite is never a substitute.
+- Real-provider spend in tests is capped at 20 USD in total. Tests use synthetic text only.
+- Never print or log secret values. List variable names only.
+- ENV RULE: every variable added to `.env.example` must also be added to `.env.local` in the same change, in the same placeholder form (commented or blank exactly as in `.env.example`), never with a real value. Run `scripts/sync_env_local.py` after editing `.env.example`. Optional variables that must not be exported blank stay commented out.
