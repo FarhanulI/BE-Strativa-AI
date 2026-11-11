@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 import app.ai_platform as ai_platform
 import app.ai_platform.config as config_module
@@ -23,6 +23,7 @@ from app.ai_platform import (
     AiProviderNotConfigured,
     AiProviderUnavailable,
     AiTaskNotReady,
+    EmbeddingLimits,
 )
 from app.core import (
     ConfigurationError,
@@ -32,14 +33,19 @@ from app.core import (
     ValidationFailed,
 )
 
-FAKE_OPENAI = "sk-fake-openai-DISTINCT-91827"
+FAKE_PERPLEXITY = "pplx-fake-DISTINCT-91827"
 FAKE_GEMINI = "fake-gemini-DISTINCT-55temp"
 
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in list(os.environ):
-        if name.upper().startswith("AI_") or name.upper() in {"OPENAI_API_KEY", "GEMINI_API_KEY"}:
+        if name.upper().startswith("AI_") or name.upper() in {
+            "OPENAI_API_KEY",
+            "PERPLEXITY_API_KEY",
+            "PERPLEXITYAI_API_KEY",
+            "GEMINI_API_KEY",
+        }:
             monkeypatch.delenv(name)
 
 
@@ -58,7 +64,10 @@ def test_defaults() -> None:
     assert config.system_limit_micro_usd == 100_000_000
     assert config.async_content_retention_days == 30
     assert config.gemini_billing_mode == "free_tier"
-    assert config.openai_api_key is None and config.gemini_api_key is None
+    assert config.perplexity_api_key is None and config.gemini_api_key is None
+    assert config.embed_max_text_units is None
+    assert config.embed_max_batch is None
+    assert config.embed_max_request_units is None
     assert (config.max_provider_attempts, config.max_repair_attempts) == (3, 1)
     assert (config.lease_seconds, config.heartbeat_seconds) == (180, 60)
     assert config.purge_batch_size == 500
@@ -200,18 +209,18 @@ def test_non_positive_values_rejected(
 
 
 def test_keys_never_leak(monkeypatch: pytest.MonkeyPatch) -> None:
-    config = make(monkeypatch, OPENAI_API_KEY=FAKE_OPENAI, GEMINI_API_KEY=FAKE_GEMINI)
-    assert isinstance(config.openai_api_key, SecretStr)
+    config = make(monkeypatch, PERPLEXITY_API_KEY=FAKE_PERPLEXITY, GEMINI_API_KEY=FAKE_GEMINI)
+    assert isinstance(config.perplexity_api_key, SecretStr)
     assert isinstance(config.gemini_api_key, SecretStr)
-    assert config.openai_api_key.get_secret_value() == FAKE_OPENAI
+    assert config.perplexity_api_key.get_secret_value() == FAKE_PERPLEXITY
     assert config.gemini_api_key.get_secret_value() == FAKE_GEMINI
     for text in (repr(config), str(config), repr(config.model_dump()), config.model_dump_json()):
-        assert FAKE_OPENAI not in text and FAKE_GEMINI not in text
+        assert FAKE_PERPLEXITY not in text and FAKE_GEMINI not in text
 
 
 def test_keys_absent_for_blank_values(monkeypatch: pytest.MonkeyPatch) -> None:
-    config = make(monkeypatch, OPENAI_API_KEY="", GEMINI_API_KEY="  ")
-    assert config.openai_api_key is None and config.gemini_api_key is None
+    config = make(monkeypatch, PERPLEXITY_API_KEY="", GEMINI_API_KEY="  ")
+    assert config.perplexity_api_key is None and config.gemini_api_key is None
 
 
 @pytest.mark.parametrize(
@@ -227,20 +236,117 @@ def test_keys_absent_for_blank_values(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_errors_never_contain_keys(
     monkeypatch: pytest.MonkeyPatch, bad_env: dict[str, str]
 ) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", FAKE_OPENAI)
+    monkeypatch.setenv("PERPLEXITY_API_KEY", FAKE_PERPLEXITY)
     monkeypatch.setenv("GEMINI_API_KEY", FAKE_GEMINI)
     for name, value in bad_env.items():
         monkeypatch.setenv(name, value)
     with pytest.raises(ConfigurationError) as raised:
         AiPlatformConfig()
     message = f"{raised.value} {raised.value!r}"
-    assert FAKE_OPENAI not in message and FAKE_GEMINI not in message
+    assert FAKE_PERPLEXITY not in message and FAKE_GEMINI not in message
     assert raised.value.__cause__ is None
 
 
 def test_keys_are_not_prefixed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AI_OPENAI_API_KEY", FAKE_OPENAI)
-    assert AiPlatformConfig().openai_api_key is None
+    monkeypatch.setenv("AI_PERPLEXITY_API_KEY", FAKE_PERPLEXITY)
+    monkeypatch.setenv("AI_GEMINI_API_KEY", FAKE_GEMINI)
+    config = AiPlatformConfig()
+    assert config.perplexity_api_key is None and config.gemini_api_key is None
+
+
+# --- provider key names (D-22) ---
+
+
+def test_litellm_perplexity_name_is_not_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = make(monkeypatch, PERPLEXITYAI_API_KEY=FAKE_PERPLEXITY)
+    assert config.perplexity_api_key is None
+
+
+def test_perplexity_name_wins_over_litellm_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = make(
+        monkeypatch, PERPLEXITY_API_KEY=FAKE_PERPLEXITY, PERPLEXITYAI_API_KEY="other-DISTINCT"
+    )
+    assert config.perplexity_api_key is not None
+    assert config.perplexity_api_key.get_secret_value() == FAKE_PERPLEXITY
+
+
+def test_openai_key_has_no_effect(monkeypatch: pytest.MonkeyPatch) -> None:
+    other = "sk-fake-DISTINCT-0001"
+    config = make(monkeypatch, OPENAI_API_KEY=other, AI_OPENAI_API_KEY=other)
+    assert config.perplexity_api_key is None and config.gemini_api_key is None
+    assert other not in repr(config) + repr(config.model_dump())
+    assert "openai" not in " ".join(config.model_dump()).lower()
+
+
+def test_no_openai_name_remains_in_config_module() -> None:
+    assert [name for name in _names(config_module) if "openai" in name.lower()] == []
+    assert "openai" not in inspect.getsource(config_module).lower()
+
+
+# --- embedding limits (5.3, D-23) ---
+
+LIMIT_ENVS = {
+    "AI_EMBED_MAX_TEXT_UNITS": "embed_max_text_units",
+    "AI_EMBED_MAX_BATCH": "embed_max_batch",
+    "AI_EMBED_MAX_REQUEST_UNITS": "embed_max_request_units",
+}
+
+
+def test_embed_limits_unset_is_accepted_at_construction() -> None:
+    config = AiPlatformConfig()
+    assert config.embed_max_text_units is None
+    assert config.embed_max_batch is None
+    assert config.embed_max_request_units is None
+
+
+def test_embedding_limits_raise_fixed_error_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ConfigurationError) as raised:
+        AiPlatformConfig().embedding_limits()
+    fixed = str(raised.value)
+    assert fixed == config_module.EMBEDDING_LIMITS_NOT_CONFIGURED
+    # Any one of the three unset gives the same fixed message.
+    for unset in LIMIT_ENVS:
+        for name in LIMIT_ENVS:
+            monkeypatch.setenv(name, "7")
+        monkeypatch.delenv(unset)
+        with pytest.raises(ConfigurationError) as raised_one:
+            AiPlatformConfig().embedding_limits()
+        assert str(raised_one.value) == fixed
+
+
+def test_embedding_limits_returned_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = make(
+        monkeypatch,
+        AI_EMBED_MAX_TEXT_UNITS="11",
+        AI_EMBED_MAX_BATCH=" 22 ",
+        AI_EMBED_MAX_REQUEST_UNITS="3333",
+    )
+    limits = config.embedding_limits()
+    assert isinstance(limits, EmbeddingLimits)
+    assert (limits.max_text_units, limits.max_batch, limits.max_request_units) == (11, 22, 3333)
+    with pytest.raises(ValidationError):
+        limits.max_batch = 1  # type: ignore[misc]  # frozen model
+    assert AiPlatformConfig(embed_max_text_units=5).embed_max_text_units == 5
+
+
+@pytest.mark.parametrize("variable", list(LIMIT_ENVS))
+@pytest.mark.parametrize("bad", ["0", "-1", "abc", "1.5", "", "  ", "1e3", "+5", "1_000"])
+def test_embed_limits_reject_bad_values(
+    monkeypatch: pytest.MonkeyPatch, variable: str, bad: str
+) -> None:
+    monkeypatch.setenv(variable, bad)
+    with pytest.raises(ConfigurationError) as raised:
+        AiPlatformConfig()
+    assert LIMIT_ENVS[variable] in str(raised.value)
+    if bad.strip():
+        assert bad not in str(raised.value)
+    assert raised.value.__cause__ is None
+
+
+def test_embed_limits_reject_non_integer_python_values() -> None:
+    for bad in (1.5, True, [1], 0):
+        with pytest.raises(ConfigurationError):
+            AiPlatformConfig(embed_max_batch=bad)  # type: ignore[arg-type]
 
 
 # --- errors ---
@@ -340,6 +446,7 @@ def test_package_root_exports() -> None:
             "AiBudgetExceeded", "AiContentRefused", "AiErrorCode", "AiInputTooLarge",
             "AiModalityNotSupported", "AiNoRoute", "AiOutputInvalid", "AiPlatformConfig",
             "AiProviderNotConfigured", "AiProviderUnavailable", "AiTaskNotReady",
+            "EmbeddingLimits",
         ]
     )  # fmt: skip
     assert not hasattr(ai_platform, "AiRequest")

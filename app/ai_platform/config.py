@@ -12,6 +12,8 @@ from typing import Any, Literal
 
 from pydantic import (
     AliasChoices,
+    BaseModel,
+    ConfigDict,
     Field,
     SecretStr,
     ValidationError,
@@ -27,6 +29,38 @@ _MAX_MICRO_USD = 2**63 - 1  # the budget columns are bigint
 _BUDGET_DECIMAL_PLACES = Decimal("0.000001")
 
 GeminiBillingMode = Literal["free_tier", "paid"]
+
+EMBEDDING_LIMITS_NOT_CONFIGURED = "AI embedding limits are not configured"
+
+
+class EmbeddingLimits(BaseModel):
+    """The three embedding input limits (spec 5.3, D-23), read by ``rag`` to size batches."""
+
+    model_config = ConfigDict(frozen=True)
+
+    max_text_units: int
+    max_batch: int
+    max_request_units: int
+
+
+def _parse_positive_int(value: Any) -> int | None:
+    """Parse an optional positive integer. ``None`` means unset. Never echoes the input."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("must be a positive integer")
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str):
+        text = value.strip()
+        if not (text.isascii() and text.isdigit()):
+            raise ValueError("must be a positive integer")
+        parsed = int(text)
+    else:
+        raise ValueError("must be a positive integer")
+    if parsed <= 0:
+        raise ValueError("must be a positive integer")
+    return parsed
 
 
 def _parse_budget_usd(value: Any) -> Decimal:
@@ -70,21 +104,29 @@ class AiPlatformConfig(BaseSettings):
     # Content retention (8.3).
     async_content_retention_days: int = Field(default=30, ge=1)
 
-    # Billing mode of the Gemini credential (10.1). The OpenAI embedding credential is always
-    # paid and is not configurable.
+    # Billing mode of the Gemini credential (10.1). The embedding credential is always paid and
+    # is not configurable.
     gemini_billing_mode: GeminiBillingMode = "free_tier"
 
-    # Provider credentials: conventional names without the AI_ prefix (5.5).
-    openai_api_key: SecretStr | None = Field(
+    # Provider credentials: exact names without the AI_ prefix (5.5, D-22). The adapter passes
+    # them to LiteLLM explicitly; no other environment name is read.
+    perplexity_api_key: SecretStr | None = Field(
         default=None,
         repr=False,
-        validation_alias=AliasChoices("OPENAI_API_KEY", "openai_api_key"),
+        validation_alias=AliasChoices("PERPLEXITY_API_KEY", "perplexity_api_key"),
     )
     gemini_api_key: SecretStr | None = Field(
         default=None,
         repr=False,
         validation_alias=AliasChoices("GEMINI_API_KEY", "gemini_api_key"),
     )
+
+    # Embedding input limits (5.3, D-23). The spec gives no numbers: they are filled at
+    # implementation from the official embeddings API reference (20.4). Unset (None) is valid
+    # until an embedding call needs them (``embedding_limits``).
+    embed_max_text_units: int | None = None
+    embed_max_batch: int | None = None
+    embed_max_request_units: int | None = None
 
     # Router and orchestrator (10.3, 10.4).
     max_provider_attempts: int = Field(default=3, gt=0)
@@ -122,7 +164,14 @@ class AiPlatformConfig(BaseSettings):
     def _validate_budget(cls, value: Any) -> Decimal:
         return _parse_budget_usd(value)
 
-    @field_validator("openai_api_key", "gemini_api_key", mode="before")
+    @field_validator(
+        "embed_max_text_units", "embed_max_batch", "embed_max_request_units", mode="before"
+    )
+    @classmethod
+    def _validate_embed_limit(cls, value: Any) -> int | None:
+        return _parse_positive_int(value)
+
+    @field_validator("perplexity_api_key", "gemini_api_key", mode="before")
     @classmethod
     def _blank_key_is_absent(cls, value: Any) -> Any:
         if isinstance(value, str) and not value.strip():
@@ -154,3 +203,17 @@ class AiPlatformConfig(BaseSettings):
     @property
     def system_limit_micro_usd(self) -> int:
         return int(self.system_monthly_budget_usd * MICRO_USD_PER_USD)
+
+    def embedding_limits(self) -> EmbeddingLimits:
+        """The embedding limits, or ``ConfigurationError`` if any of the three is unset."""
+        if (
+            self.embed_max_text_units is None
+            or self.embed_max_batch is None
+            or self.embed_max_request_units is None
+        ):
+            raise ConfigurationError(EMBEDDING_LIMITS_NOT_CONFIGURED)
+        return EmbeddingLimits(
+            max_text_units=self.embed_max_text_units,
+            max_batch=self.embed_max_batch,
+            max_request_units=self.embed_max_request_units,
+        )

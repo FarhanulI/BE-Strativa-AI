@@ -25,6 +25,8 @@ class _FixedDetail:
     fixed_detail: ClassVar[str]
 
     def __init__(self) -> None:
+        # The mixin's static base is object, whose __init__ takes no arguments; at runtime the
+        # MRO continues into the concrete DomainError, which takes the detail.
         super().__init__(self.fixed_detail)  # type: ignore[call-arg]
 
 

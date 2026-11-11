@@ -1,7 +1,7 @@
 # Importing the models registers the ai_* tables on the shared metadata (alembic, tenant-scope
 # validation). The ORM classes are not exported: they are not part of the public surface (spec 5.6).
 from app.ai_platform import models as _models  # noqa: F401
-from app.ai_platform.config import AiPlatformConfig
+from app.ai_platform.config import AiPlatformConfig, EmbeddingLimits
 from app.ai_platform.errors import (
     AiBudgetExceeded,
     AiContentRefused,
@@ -27,4 +27,5 @@ __all__ = [
     "AiProviderNotConfigured",
     "AiProviderUnavailable",
     "AiTaskNotReady",
+    "EmbeddingLimits",
 ]
