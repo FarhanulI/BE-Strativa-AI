@@ -22,6 +22,7 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.ai_platform.enums import CostClass, LatencyClass
 from app.core import ConfigurationError
 
 MICRO_USD_PER_USD = Decimal(1_000_000)
@@ -141,6 +142,11 @@ class AiPlatformConfig(BaseSettings):
     standard_deadline_seconds: int = Field(default=60, gt=0)
     batch_deadline_seconds: int = Field(default=300, gt=0)
 
+    # Worst-case cost ceiling of one provider call, by cost class, in integer micro-USD (9).
+    cost_ceiling_low_micro_usd: int = Field(default=20_000, gt=0)
+    cost_ceiling_medium_micro_usd: int = Field(default=100_000, gt=0)
+    cost_ceiling_high_micro_usd: int = Field(default=500_000, gt=0)
+
     # Jobs (8).
     lease_seconds: int = Field(default=180, gt=0)
     heartbeat_seconds: int = Field(default=60, gt=0)
@@ -179,6 +185,19 @@ class AiPlatformConfig(BaseSettings):
         return value
 
     @model_validator(mode="after")
+    def _validate_cost_ceilings(self) -> AiPlatformConfig:
+        if not (
+            self.cost_ceiling_low_micro_usd
+            < self.cost_ceiling_medium_micro_usd
+            < self.cost_ceiling_high_micro_usd
+        ):
+            raise ConfigurationError(
+                "cost_ceiling_low_micro_usd, cost_ceiling_medium_micro_usd and "
+                "cost_ceiling_high_micro_usd must be strictly ascending"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_timing(self) -> AiPlatformConfig:
         if self.heartbeat_seconds >= self.lease_seconds:
             raise ConfigurationError("heartbeat_seconds must be less than lease_seconds")
@@ -195,6 +214,22 @@ class AiPlatformConfig(BaseSettings):
             self.standard_deadline_seconds,
             self.batch_deadline_seconds,
         )
+
+    def cost_ceiling_micro_usd(self, cost: CostClass) -> int:
+        """The worst-case cost ceiling of a single provider call for a cost class."""
+        return {
+            CostClass.LOW: self.cost_ceiling_low_micro_usd,
+            CostClass.MEDIUM: self.cost_ceiling_medium_micro_usd,
+            CostClass.HIGH: self.cost_ceiling_high_micro_usd,
+        }[cost]
+
+    def deadline_seconds(self, latency: LatencyClass) -> int:
+        """The total request deadline for a latency class."""
+        return {
+            LatencyClass.INTERACTIVE: self.interactive_deadline_seconds,
+            LatencyClass.STANDARD: self.standard_deadline_seconds,
+            LatencyClass.BATCH: self.batch_deadline_seconds,
+        }[latency]
 
     @property
     def workspace_limit_micro_usd(self) -> int:

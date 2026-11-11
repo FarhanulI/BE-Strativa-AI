@@ -447,6 +447,10 @@ def test_package_root_exports() -> None:
             "AiModalityNotSupported", "AiNoRoute", "AiOutputInvalid", "AiPlatformConfig",
             "AiProviderNotConfigured", "AiProviderUnavailable", "AiTaskNotReady",
             "EmbeddingLimits",
+            "AiCapability", "AiContextBlock", "AiModality", "AiPart", "AiTaskDefinition",
+            "AiTaskName", "AiTaskRegistry", "AiTaskRequest", "AudioPart", "CostClass",
+            "ImagePart", "LatencyClass", "MediaRef", "OutputSchemaRegistry", "QualityClass",
+            "TaskScope", "TextPart", "VideoPart",
         ]
     )  # fmt: skip
     assert not hasattr(ai_platform, "AiRequest")
