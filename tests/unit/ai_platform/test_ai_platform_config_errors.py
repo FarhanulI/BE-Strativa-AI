@@ -52,14 +52,14 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def make(monkeypatch: pytest.MonkeyPatch, **env: str) -> AiPlatformConfig:
     for name, value in env.items():
         monkeypatch.setenv(name, value)
-    return AiPlatformConfig()
+    return AiPlatformConfig(_env_file=None)
 
 
 # --- config defaults ---
 
 
 def test_defaults() -> None:
-    config = AiPlatformConfig()
+    config = AiPlatformConfig(_env_file=None)
     assert config.workspace_limit_micro_usd == 25_000_000
     assert config.system_limit_micro_usd == 100_000_000
     assert config.async_content_retention_days == 30
@@ -100,9 +100,7 @@ def test_defaults() -> None:
         ("100", 100_000_000),
     ],
 )
-def test_budget_conversion_is_exact(
-    monkeypatch: pytest.MonkeyPatch, text: str, micro: int
-) -> None:
+def test_budget_conversion_is_exact(monkeypatch: pytest.MonkeyPatch, text: str, micro: int) -> None:
     config = make(
         monkeypatch, AI_WORKSPACE_MONTHLY_BUDGET_USD=text, AI_SYSTEM_MONTHLY_BUDGET_USD=text
     )
@@ -129,7 +127,7 @@ def test_budget_rejections(monkeypatch: pytest.MonkeyPatch, variable: str, text:
 
 def test_budget_rejects_float_input() -> None:
     with pytest.raises(ConfigurationError):
-        AiPlatformConfig(workspace_monthly_budget_usd=12.5)  # type: ignore[arg-type]
+        AiPlatformConfig(_env_file=None, workspace_monthly_budget_usd=12.5)  # type: ignore[arg-type]
 
 
 def test_retention_must_be_at_least_one(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,7 +135,7 @@ def test_retention_must_be_at_least_one(monkeypatch: pytest.MonkeyPatch) -> None
     for bad in ("0", "-5", "x", ""):
         monkeypatch.setenv("AI_ASYNC_CONTENT_RETENTION_DAYS", bad)
         with pytest.raises(ConfigurationError):
-            AiPlatformConfig()
+            AiPlatformConfig(_env_file=None)
 
 
 # --- billing mode ---
@@ -148,7 +146,7 @@ def test_billing_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     for bad in ("trial", "", "PAID ", "free"):
         monkeypatch.setenv("AI_GEMINI_BILLING_MODE", bad)
         with pytest.raises(ConfigurationError):
-            AiPlatformConfig()
+            AiPlatformConfig(_env_file=None)
 
 
 # --- timing validation ---
@@ -159,21 +157,21 @@ def test_sync_stale_must_exceed_longest_deadline(monkeypatch: pytest.MonkeyPatch
     for bad in ("300", "299", "1"):
         monkeypatch.setenv("AI_SYNC_STALE_AFTER_SECONDS", bad)
         with pytest.raises(ConfigurationError):
-            AiPlatformConfig()
+            AiPlatformConfig(_env_file=None)
 
 
 def test_sync_stale_follows_a_raised_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_BATCH_DEADLINE_SECONDS", "420")
     with pytest.raises(ConfigurationError):
-        AiPlatformConfig()
+        AiPlatformConfig(_env_file=None)
 
 
 def test_heartbeat_must_be_less_than_lease(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_HEARTBEAT_SECONDS", "180")
     with pytest.raises(ConfigurationError):
-        AiPlatformConfig()
+        AiPlatformConfig(_env_file=None)
     monkeypatch.setenv("AI_HEARTBEAT_SECONDS", "179")
-    assert AiPlatformConfig().heartbeat_seconds == 179
+    assert AiPlatformConfig(_env_file=None).heartbeat_seconds == 179
 
 
 @pytest.mark.parametrize(
@@ -202,7 +200,7 @@ def test_non_positive_values_rejected(
 ) -> None:
     monkeypatch.setenv(variable, bad)
     with pytest.raises(ConfigurationError):
-        AiPlatformConfig()
+        AiPlatformConfig(_env_file=None)
 
 
 # --- keys never leak ---
@@ -241,7 +239,7 @@ def test_errors_never_contain_keys(
     for name, value in bad_env.items():
         monkeypatch.setenv(name, value)
     with pytest.raises(ConfigurationError) as raised:
-        AiPlatformConfig()
+        AiPlatformConfig(_env_file=None)
     message = f"{raised.value} {raised.value!r}"
     assert FAKE_PERPLEXITY not in message and FAKE_GEMINI not in message
     assert raised.value.__cause__ is None
@@ -250,7 +248,7 @@ def test_errors_never_contain_keys(
 def test_keys_are_not_prefixed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_PERPLEXITY_API_KEY", FAKE_PERPLEXITY)
     monkeypatch.setenv("AI_GEMINI_API_KEY", FAKE_GEMINI)
-    config = AiPlatformConfig()
+    config = AiPlatformConfig(_env_file=None)
     assert config.perplexity_api_key is None and config.gemini_api_key is None
 
 
@@ -293,7 +291,7 @@ LIMIT_ENVS = {
 
 
 def test_embed_limits_unset_is_accepted_at_construction() -> None:
-    config = AiPlatformConfig()
+    config = AiPlatformConfig(_env_file=None)
     assert config.embed_max_text_units is None
     assert config.embed_max_batch is None
     assert config.embed_max_request_units is None
@@ -301,7 +299,7 @@ def test_embed_limits_unset_is_accepted_at_construction() -> None:
 
 def test_embedding_limits_raise_fixed_error_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ConfigurationError) as raised:
-        AiPlatformConfig().embedding_limits()
+        AiPlatformConfig(_env_file=None).embedding_limits()
     fixed = str(raised.value)
     assert fixed == config_module.EMBEDDING_LIMITS_NOT_CONFIGURED
     # Any one of the three unset gives the same fixed message.
@@ -310,7 +308,7 @@ def test_embedding_limits_raise_fixed_error_when_unset(monkeypatch: pytest.Monke
             monkeypatch.setenv(name, "7")
         monkeypatch.delenv(unset)
         with pytest.raises(ConfigurationError) as raised_one:
-            AiPlatformConfig().embedding_limits()
+            AiPlatformConfig(_env_file=None).embedding_limits()
         assert str(raised_one.value) == fixed
 
 
@@ -326,7 +324,7 @@ def test_embedding_limits_returned_when_set(monkeypatch: pytest.MonkeyPatch) -> 
     assert (limits.max_text_units, limits.max_batch, limits.max_request_units) == (11, 22, 3333)
     with pytest.raises(ValidationError):
         limits.max_batch = 1  # type: ignore[misc]  # frozen model
-    assert AiPlatformConfig(embed_max_text_units=5).embed_max_text_units == 5
+    assert AiPlatformConfig(_env_file=None, embed_max_text_units=5).embed_max_text_units == 5
 
 
 @pytest.mark.parametrize("variable", list(LIMIT_ENVS))
@@ -336,7 +334,7 @@ def test_embed_limits_reject_bad_values(
 ) -> None:
     monkeypatch.setenv(variable, bad)
     with pytest.raises(ConfigurationError) as raised:
-        AiPlatformConfig()
+        AiPlatformConfig(_env_file=None)
     assert LIMIT_ENVS[variable] in str(raised.value)
     if bad.strip():
         assert bad not in str(raised.value)
@@ -346,7 +344,7 @@ def test_embed_limits_reject_bad_values(
 def test_embed_limits_reject_non_integer_python_values() -> None:
     for bad in (1.5, True, [1], 0):
         with pytest.raises(ConfigurationError):
-            AiPlatformConfig(embed_max_batch=bad)  # type: ignore[arg-type]
+            AiPlatformConfig(_env_file=None, embed_max_batch=bad)  # type: ignore[arg-type]
 
 
 # --- errors ---

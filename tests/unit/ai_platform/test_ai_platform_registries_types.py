@@ -131,7 +131,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_cost_ceiling_defaults(clean_env: None) -> None:
-    config = AiPlatformConfig()
+    config = AiPlatformConfig(_env_file=None)
     assert config.cost_ceiling_micro_usd(K.LOW) == 20_000
     assert config.cost_ceiling_micro_usd(K.MEDIUM) == 100_000
     assert config.cost_ceiling_micro_usd(K.HIGH) == 500_000
@@ -142,7 +142,10 @@ def test_cost_ceiling_defaults(clean_env: None) -> None:
 
 def test_cost_ceilings_configurable(clean_env: None) -> None:
     config = AiPlatformConfig(
-        cost_ceiling_low_micro_usd=1, cost_ceiling_medium_micro_usd=2, cost_ceiling_high_micro_usd=3
+        _env_file=None,
+        cost_ceiling_low_micro_usd=1,
+        cost_ceiling_medium_micro_usd=2,
+        cost_ceiling_high_micro_usd=3,
     )
     assert [config.cost_ceiling_micro_usd(c) for c in K] == [1, 2, 3]
 
@@ -163,7 +166,7 @@ def test_cost_ceiling_violations_raise_configuration_error(
     clean_env: None, values: dict[str, Any]
 ) -> None:
     with pytest.raises(ConfigurationError) as raised:
-        AiPlatformConfig(**values)
+        AiPlatformConfig(_env_file=None, **values)
     message = str(raised.value)
     assert "cost_ceiling" in message
     for value in values.values():

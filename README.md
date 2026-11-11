@@ -38,6 +38,8 @@ uv run python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Every variable added to `.env.example` must also be added to `.env.local` in the same change. Run `just sync-env` (`scripts/sync_env_local.py`) to append the missing names as placeholders; it never changes existing lines and prints names only.
 
+`ai_platform` variables (`AI_*`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`) can be set in `.env.local` or in the process environment. `AiPlatformConfig` reads the same files as core `Settings` (in test mode `.env.local` is not read) and the process environment wins over file values.
+
 Keys are listed in `.env.example`. Never commit populated env files. `NEON_BRANCH_NAME` must match `APP_ENV` (`dev`, `test`, `production`).
 
 ## Start Redis

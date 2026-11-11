@@ -7,6 +7,7 @@ setting, never its value.
 
 from __future__ import annotations
 
+import os
 from decimal import Decimal, InvalidOperation, localcontext
 from typing import Any, Literal
 
@@ -23,7 +24,7 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.ai_platform.enums import CostClass, LatencyClass
-from app.core import ConfigurationError
+from app.core import ConfigurationError, Settings, select_env_files
 
 MICRO_USD_PER_USD = Decimal(1_000_000)
 _MAX_MICRO_USD = 2**63 - 1  # the budget columns are bigint
@@ -156,6 +157,14 @@ class AiPlatformConfig(BaseSettings):
     sync_stale_after_seconds: int = Field(default=420, gt=0)
 
     def __init__(self, **values: Any) -> None:
+        # Same env files as core Settings (shared selection logic); real process environment
+        # variables take precedence over file values. Pass ``_env_file=None`` to read none.
+        if "_env_file" not in values:
+            values["_env_file"] = select_env_files(
+                Settings.repository_root(),
+                os.environ.get("APP_ENV"),
+                os.environ.get("TEST_DB_MODE") or "neon",
+            ).env_files
         try:
             super().__init__(**values)
         except ValidationError as error:
