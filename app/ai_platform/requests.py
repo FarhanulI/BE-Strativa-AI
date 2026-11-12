@@ -81,9 +81,9 @@ class AiTaskRequest(BaseModel):
     context: list[AiContextBlock] = []
     parts: list[AiPart] = []
     output_schema_version: int | None = Field(default=None, gt=0)
-    max_output_units: int | None = Field(default=None, gt=0)
+    max_output_units: int | None = Field(default=None, gt=0, strict=True)
     quality_floor: QualityClass | None = None
-    persist_result: bool = False
+    persist_result: bool = Field(default=False, strict=True)
 
     @field_validator("task")
     @classmethod

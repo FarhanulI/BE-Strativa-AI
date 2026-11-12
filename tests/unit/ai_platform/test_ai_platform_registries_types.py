@@ -8,8 +8,10 @@ import pytest
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 import app.ai_platform as ai_platform
+import app.ai_platform.catalog as catalog_module
 import app.ai_platform.config as config_module
 import app.ai_platform.enums as enums_module
+import app.ai_platform.pricing as pricing_module
 import app.ai_platform.requests as requests_module
 import app.ai_platform.schemas as schemas_module
 import app.ai_platform.tasks as tasks_module
@@ -418,7 +420,10 @@ def _public_names(module: Any) -> set[str]:
 
 @pytest.mark.parametrize(
     "module",
-    [config_module, enums_module, tasks_module, schemas_module, requests_module, ai_platform],
+    [
+        config_module, enums_module, tasks_module, schemas_module, requests_module,
+        catalog_module, pricing_module, ai_platform,
+    ],  # fmt: skip
 )
 def test_no_token_in_names(module: Any) -> None:
     assert [n for n in _public_names(module) if "token" in n.lower()] == []
