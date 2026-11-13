@@ -50,5 +50,5 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["app.core"]
+packages = ["app.core", "app.ai_platform"]
 plugins = ["pydantic.mypy"]

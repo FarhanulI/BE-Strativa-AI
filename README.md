@@ -36,6 +36,10 @@ Generate the secret with:
 uv run python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
+Every variable added to `.env.example` must also be added to `.env.local` in the same change. Run `just sync-env` (`scripts/sync_env_local.py`) to append the missing names as placeholders; it never changes existing lines and prints names only.
+
+`ai_platform` variables (`AI_*`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`) can be set in `.env.local` or in the process environment. `AiPlatformConfig` reads the same files as core `Settings` (in test mode `.env.local` is not read) and the process environment wins over file values.
+
 Keys are listed in `.env.example`. Never commit populated env files. `NEON_BRANCH_NAME` must match `APP_ENV` (`dev`, `test`, `production`).
 
 ## Start Redis
@@ -92,6 +96,7 @@ Restart the server after changing env files.
 | `just test-db` | Run DB tests in Neon mode (needs `.env.test.local`, `APP_ENV=test`) |
 | `just test-db-up` / `just test-db-local` / `just test-db-down` | Start, use and remove the local Docker test database (`TEST_DB_MODE=local`) |
 | `just openapi` | Regenerate `openapi.json` |
+| `just sync-env` | Append names missing from `.env.local` that exist in `.env.example` (names only, never values) |
 
 ## Test database modes
 
@@ -107,6 +112,8 @@ $env:TEST_DB_MODE="local"; $env:APP_ENV="test"
 uv run python scripts/test_db.py                        # just test-db-local
 docker rm -f strativa-test-db                           # just test-db-down (data is on tmpfs)
 ```
+
+`APP_ENV=test` must be exported in the process environment, not only present in `.env.test.docker.local`. The entry guard and most DB tests load that file, but tests that build `Settings(_env_file=None)` (the auth, workspace and profile API tests, 13 in all) read only the process environment and fail with `TEST_DB_MODE=local requires APP_ENV=test` if it is missing. The guard is correct to refuse.
 
 SQLite is never a substitute. Tests never run against the dev or production databases. A scheduled nightly run on the Neon `test` branch is planned as a later delivery-phase job and is not defined yet.
 

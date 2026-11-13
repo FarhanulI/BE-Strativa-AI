@@ -2,9 +2,11 @@ from app.core.clock import Clock, FakeClock, SystemClock
 from app.core.config import (
     AppEnvironment,
     ConfigurationError,
+    EnvFileSelection,
     Settings,
     parse_database_target,
     require_local_test_targets,
+    select_env_files,
 )
 from app.core.context import (
     RequestContext,
@@ -37,6 +39,7 @@ __all__ = [
     "AppEnvironment",
     "Clock",
     "ConfigurationError",
+    "EnvFileSelection",
     "Conflict",
     "CursorPage",
     "CursorParams",
@@ -51,6 +54,7 @@ __all__ = [
     "RateLimited",
     "RequestContext",
     "Settings",
+    "select_env_files",
     "SoftDeleteMixin",
     "SystemClock",
     "TimestampMixin",
