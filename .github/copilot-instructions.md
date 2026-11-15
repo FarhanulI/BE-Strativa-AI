@@ -34,3 +34,4 @@
 - Never print or log secret values. List variable names only.
 - ENV RULE: every variable added to `.env.example` must also be added to `.env.local` in the same change, in the same placeholder form (commented or blank exactly as in `.env.example`), never with a real value. Run `scripts/sync_env_local.py` after editing `.env.example`. Optional variables that must not be exported blank stay commented out.
 - Never view `.env*` files with any tool; print variable names only. If a secret value is ever shown, report it immediately.
+- Run the database suite with /run-db-suite; never set or print the test password.
