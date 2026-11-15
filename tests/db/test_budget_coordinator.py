@@ -8,9 +8,10 @@ fixture. Each test builds its own workspaces and requests with fresh ids and a p
 (system-scope budget rows have no workspace to cascade from). Teardown deletes ONLY what the test
 created or caused, by id: the usage records (through their request), the budget rows, the outbox
 events and audit rows of those budget rows, and the workspaces. Nothing is truncated. ``audit_log``
-is append-only by a row trigger, so the teardown disables that one trigger inside its own
-transaction, deletes the audit rows of the test's budget rows by id, and enables it again before the
-commit; a failure rolls the whole transaction back, so the trigger is never left disabled.
+is append-only by a row trigger, so the teardown goes through ``tests.helpers.audit_teardown``: it
+refuses on a database without the local marker, disables that one trigger inside its own
+transaction, deletes the audit rows by id, enables it again and verifies it in pg_trigger; a
+failure rolls the whole transaction back, so the trigger is never left disabled.
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ from app.core import FakeClock, Settings, SystemClock, UUID7Factory
 from app.db_migrations.engine import build_async_engine
 from app.events_outbox import DomainEvent, OutboxEvent
 from app.workspace.models import Workspace
+from tests.helpers.audit_teardown import delete_audit_rows
 
 pytestmark = pytest.mark.db
 
@@ -324,15 +326,11 @@ class Env:
                 ),
                 {"ids": self.budget_rows},
             )
-            await session.execute(text("ALTER TABLE audit_log DISABLE TRIGGER audit_log_immutable"))
-            await session.execute(
-                text(
-                    "DELETE FROM audit_log WHERE resource_type = 'ai_budget' "
-                    "AND resource_id = ANY(CAST(:ids AS text[]))"
-                ),
-                {"ids": [str(row_id) for row_id in self.budget_rows]},
+            await delete_audit_rows(
+                session,
+                resource_type="ai_budget",
+                resource_ids=[str(row_id) for row_id in self.budget_rows],
             )
-            await session.execute(text("ALTER TABLE audit_log ENABLE TRIGGER audit_log_immutable"))
             for table, ids in (
                 ("ai_requests", self.requests),  # cascades to ai_usage_records
                 ("ai_budget_periods", self.budget_rows),
