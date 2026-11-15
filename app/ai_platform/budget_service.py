@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.ai_platform import budget_repository as repo
@@ -72,7 +73,8 @@ class AiBudgetService:
         """Budget status of the context's workspace for the current UTC month."""
         workspace_id = require_workspace_id(ctx)
         period_start = repo.period_start_for(self._clock.now())
-        async with self._sessions() as session, session.begin():
+        async with self._sessions() as session:  # read only; closing it rolls back, never commits
+            await session.execute(text("SET TRANSACTION READ ONLY"))
             row = await repo.find_workspace_budget_row(session, workspace_id, period_start)
         spent = 0 if row is None else row.spent_micro_usd
         reserved = 0 if row is None else row.reserved_micro_usd

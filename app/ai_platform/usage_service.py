@@ -59,7 +59,8 @@ class AiUsageService:
             "AND status <> 'reserved' "
             f"GROUP BY {key_sql}"
         )
-        async with self._sessions() as session, session.begin():
+        async with self._sessions() as session:  # read only; closing it rolls back, never commits
+            await session.execute(text("SET TRANSACTION READ ONLY"))
             rows = (
                 await session.execute(
                     statement, {"workspace_id": workspace_id, "period_start": period_start}
