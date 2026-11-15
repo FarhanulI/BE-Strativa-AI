@@ -5,6 +5,7 @@
 # app.ai_platform.events only.
 from app.ai_platform import events as _events  # noqa: F401
 from app.ai_platform import models as _models  # noqa: F401
+from app.ai_platform.budget_service import AiBudgetService
 from app.ai_platform.config import AiPlatformConfig, EmbeddingLimits
 from app.ai_platform.context import AiCallContext
 from app.ai_platform.enums import (
@@ -40,10 +41,12 @@ from app.ai_platform.requests import (
 )
 from app.ai_platform.schemas import OutputSchemaRegistry
 from app.ai_platform.tasks import AiTaskDefinition, AiTaskRegistry
+from app.ai_platform.usage_service import AiUsageService
 from app.ai_platform.usage_types import AiBudgetStatus, AiUsageReport, AiUsageSummary
 
 __all__ = [
     "AiBudgetExceeded",
+    "AiBudgetService",
     "AiBudgetStatus",
     "AiCallContext",
     "AiCapability",
@@ -65,6 +68,7 @@ __all__ = [
     "AiTaskRegistry",
     "AiTaskRequest",
     "AiUsageReport",
+    "AiUsageService",
     "AiUsageSummary",
     "AudioPart",
     "CostClass",

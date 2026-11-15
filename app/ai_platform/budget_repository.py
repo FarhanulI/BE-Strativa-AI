@@ -249,6 +249,27 @@ async def ensure_budget_row(
     return row_id
 
 
+async def find_workspace_budget_row(
+    session: AsyncSession, workspace_id: UUID, period_start: date
+) -> BudgetRowSnapshot | None:
+    """Read the workspace-scope budget row of one workspace and period, or None (read only)."""
+    _uuid("workspace_id", workspace_id)
+    _period(period_start)
+    row_id = (
+        await session.execute(
+            text(
+                "SELECT id FROM ai_budget_periods "
+                "WHERE scope = 'workspace' AND workspace_id = :workspace_id "
+                "AND period_start = :period_start"
+            ),
+            {"workspace_id": workspace_id, "period_start": period_start},
+        )
+    ).scalar_one_or_none()
+    if row_id is None:
+        return None
+    return await get_budget_row(session, row_id)
+
+
 async def get_budget_row(session: AsyncSession, budget_row_id: UUID) -> BudgetRowSnapshot | None:
     """Read one budget row as an immutable snapshot, or None when it does not exist."""
     _uuid("budget_row_id", budget_row_id)
