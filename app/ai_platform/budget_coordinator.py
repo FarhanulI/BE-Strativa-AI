@@ -44,7 +44,11 @@ THRESHOLD_ACTION = "ai.budget.threshold_reached"
 AUDIT_RESOURCE_TYPE = "ai_budget"
 AUDIT_ACTOR_TYPE = "system"
 
-_log = structlog.get_logger("app.ai_platform.budget")
+
+
+def _log() -> Any:
+    """A fresh bound logger per use, so log capture and later logging configuration both apply."""
+    return structlog.get_logger("app.ai_platform.budget")
 
 
 @dataclass(frozen=True)
@@ -186,7 +190,7 @@ class BudgetCoordinator:
             if await repo.record_refusal(session, budget_row_id, limit, now):
                 await self._publish_budget_event(session, budget_row_id, now, exhausted=True)
         # The transaction above has committed. Only now does the caller learn of the refusal.
-        _log.info(
+        _log().info(
             "ai_budget_refused", scope=scope, task=params.task, period=period.isoformat()
         )
         raise AiBudgetExceeded()
@@ -240,7 +244,7 @@ class BudgetCoordinator:
                     session, budget_row_id, now, exhausted=False
                 )
         if snapshot is not None:
-            _log.warning(
+            _log().warning(
                 "ai_budget_threshold",
                 scope=snapshot.scope,
                 workspace_id=None if snapshot.workspace_id is None else str(snapshot.workspace_id),
