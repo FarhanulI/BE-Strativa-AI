@@ -8,6 +8,9 @@ from typing import Any
 FAKE_PROVIDER = "fakeprov"
 FAKE_CHAT_MODEL = "fake-chat-zq1"
 FAKE_EMBED_MODEL = "fake-embed-zq2"
+# Further fake providers for router tests (billing mode is configuration, never catalog data).
+FAKE_PROVIDER_P1 = "fakeprov-p1"
+FAKE_PROVIDER_P2 = "fakeprov-p2"
 
 
 def chat_entry(**overrides: Any) -> dict[str, Any]:
