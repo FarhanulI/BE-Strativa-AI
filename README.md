@@ -132,9 +132,9 @@ How it works: after the static rules (label must equal the `APP_ENV` label, loop
 
 A Neon run applies the migrations to the test branch (`alembic upgrade head`). Reversibility and downgrade tests never run in Neon mode; they require local mode.
 
-Pooled endpoint caveat: migrations, the live check and the gate check use the direct URL. A direct URL whose host contains `-pooler` points at the pooler, which is not suitable for DDL; the gate check reports this as `pooled_endpoint`.
+Pooled endpoint caveat: migrations, the live check and the gate check use the direct URL. A direct URL whose host contains `-pooler` points at the pooler, which is not suitable for DDL; the gate check reports this per variable (see below).
 
-Read-only gate check, which touches nothing and prints no URL, host or credential: `uv run python scripts/neon_gate_check.py [--counts]`. It prints `mode`, `label_ok`, `marker_ok`, `pooled_endpoint`, `server_major_version`, `extensions` (names), `audit_trigger_enabled` and, with `--counts`, row counts of `ai_requests`, `ai_usage_records`, `ai_budget_periods`, `workspaces`, `users`, `outbox_events` and `audit_log`. Exit code 0 only when `label_ok` and `marker_ok` are both true; it refuses local mode and `APP_ENV` dev or prod.
+Read-only gate check, which touches nothing and prints no URL, host or credential: `uv run python scripts/neon_gate_check.py [--counts]`. It prints `mode`, `label_ok`, `marker_ok`, one `pooled_<VARIABLE>` boolean per configured URL variable (`pooled_DATABASE_URL`, `pooled_DATABASE_URL_DIRECT`, `pooled_DATABASE_URL_UNPOOLED`; true when that URL's host name contains `-pooler`; names only, never hosts), `test_connection_variable` (the variable the test suite connects through, `DATABASE_URL_DIRECT`; if only `DATABASE_URL_UNPOOLED` is set, Settings copies it into that field), `server_major_version`, `extensions` (names), `audit_trigger_enabled` and, with `--counts`, row counts of `ai_requests`, `ai_usage_records`, `ai_budget_periods`, `workspaces`, `users`, `outbox_events` and `audit_log`. Exit code 0 only when `label_ok` and `marker_ok` are both true; it refuses local mode and `APP_ENV` dev or prod.
 
 SQLite is never a substitute. Tests never run against the dev or production databases. A scheduled nightly run on the Neon `test` branch is planned as a later delivery-phase job and is not defined yet.
 

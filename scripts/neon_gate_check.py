@@ -38,6 +38,26 @@ NOT_NEON_MESSAGE = "neon_gate_check runs only with APP_ENV=test in Neon mode"
 ERROR_MESSAGE = "neon_gate_check failed"
 
 
+# The test suite connects through ``settings.require_database_url(direct=True)`` (tests/conftest.py,
+# tests/helpers/database_setup.py and the guard), i.e. the field behind DATABASE_URL_DIRECT. When
+# only DATABASE_URL_UNPOOLED is set, Settings copies it into that field.
+TEST_CONNECTION_VARIABLE = "DATABASE_URL_DIRECT"
+
+
+def pooled_flags(settings: Settings) -> dict[str, bool]:
+    """One boolean per configured URL variable, keyed ``pooled_<NAME>``. Names only, no hosts."""
+    candidates = (
+        ("DATABASE_URL", settings.database_url),
+        ("DATABASE_URL_DIRECT", settings.database_url_direct),
+        ("DATABASE_URL_UNPOOLED", settings.database_url_unpooled),
+    )
+    return {
+        f"pooled_{name}": is_pooled_endpoint(value.get_secret_value())
+        for name, value in candidates
+        if value is not None
+    }
+
+
 def is_pooled_endpoint(url: str) -> bool:
     host = parse_database_target(url).host
     return host is not None and "-pooler" in host
@@ -52,7 +72,8 @@ async def collect(settings: Settings, connection: Any, *, counts: bool) -> dict[
         report["marker_ok"] = False
         return report
     report["marker_ok"] = True
-    report["pooled_endpoint"] = is_pooled_endpoint(settings.require_database_url(direct=True))
+    report.update(pooled_flags(settings))
+    report["test_connection_variable"] = TEST_CONNECTION_VARIABLE
     version = (await connection.execute(text("SHOW server_version_num"))).scalar()
     report["server_major_version"] = int(version) // 10000
     extensions = await connection.execute(text("SELECT extname FROM pg_extension ORDER BY extname"))

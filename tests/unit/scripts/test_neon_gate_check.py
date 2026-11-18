@@ -22,7 +22,9 @@ BASE_KEYS = {
     "mode",
     "label_ok",
     "marker_ok",
-    "pooled_endpoint",
+    "pooled_DATABASE_URL",
+    "pooled_DATABASE_URL_DIRECT",
+    "test_connection_variable",
     "server_major_version",
     "extensions",
     "audit_trigger_enabled",
@@ -104,23 +106,46 @@ def test_report_has_exactly_the_documented_keys_and_values() -> None:
         "mode": "neon",
         "label_ok": True,
         "marker_ok": True,
-        "pooled_endpoint": True,
+        "pooled_DATABASE_URL": True,
+        "pooled_DATABASE_URL_DIRECT": True,
+        "test_connection_variable": "DATABASE_URL_DIRECT",
         "server_major_version": 17,
         "extensions": ["pgcrypto", "plpgsql", "vector"],
         "audit_trigger_enabled": True,
     }
 
 
-def test_pooled_endpoint_false_for_a_direct_host() -> None:
+def test_pooled_flags_are_reported_per_variable_name() -> None:
+    direct = f"postgresql://u:{PASSWORD}@ep-direct-1.region.aws.neon.tech/neondb"
+    report = asyncio.run(
+        gate.collect(settings(database_url_direct=direct), FakeConnection(), counts=False)
+    )
+    assert report["pooled_DATABASE_URL"] is True
+    assert report["pooled_DATABASE_URL_DIRECT"] is False
+    assert "pooled_DATABASE_URL_UNPOOLED" not in report
+
+
+def test_unpooled_variable_gets_its_own_flag() -> None:
     direct = f"postgresql://u:{PASSWORD}@ep-direct-1.region.aws.neon.tech/neondb"
     report = asyncio.run(
         gate.collect(
-            settings(database_url=direct, database_url_direct=direct),
+            settings(database_url_direct=None, database_url_unpooled=direct),
             FakeConnection(),
             counts=False,
         )
     )
-    assert report["pooled_endpoint"] is False
+    assert report["pooled_DATABASE_URL_UNPOOLED"] is False
+    assert report["pooled_DATABASE_URL_DIRECT"] is False
+    assert set(report) - BASE_KEYS == {"pooled_DATABASE_URL_UNPOOLED"}
+
+
+def test_test_connection_variable_matches_what_the_test_setup_reads() -> None:
+    sources = [
+        (ROOT / name).read_text(encoding="utf-8")
+        for name in ("tests/conftest.py", "tests/helpers/database_setup.py")
+    ]
+    assert "require_database_url(direct=True)" in sources[0]
+    assert gate.TEST_CONNECTION_VARIABLE == "DATABASE_URL_DIRECT"
 
 
 def test_disabled_or_missing_trigger_reports_false() -> None:
