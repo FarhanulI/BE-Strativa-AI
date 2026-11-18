@@ -23,7 +23,7 @@ import structlog
 
 from app.ai_platform.config import AiPlatformConfig
 from app.ai_platform.failure_policy import ProviderFailureKind, classify
-from app.core.clock import Clock
+from app.core import Clock
 
 BreakerState = Literal["closed", "open", "half_open"]
 ModelKey = tuple[str, str]
