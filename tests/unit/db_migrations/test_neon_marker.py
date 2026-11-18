@@ -16,7 +16,7 @@ from app.db_migrations.guard import (
     NEON_TEST_MARKER,
     confirm_local_test_database,
     confirm_neon_test_database,
-    verify_local_test_database,
+    verify_test_database,
 )
 from tests.helpers import audit_teardown
 from tests.helpers.audit_teardown import (
@@ -117,13 +117,13 @@ def _spy(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
 
 def test_live_check_runs_in_neon_mode_for_test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _spy(monkeypatch)
-    verify_local_test_database(neon_test_settings())
+    verify_test_database(neon_test_settings())
     assert calls == [True]
 
 
 def test_live_check_runs_in_local_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _spy(monkeypatch)
-    verify_local_test_database(local_settings())
+    verify_test_database(local_settings())
     assert calls == [False]
 
 
@@ -142,7 +142,7 @@ def test_live_check_unreachable_for_dev_and_prod(
         database_url=NEON_URL,
         database_url_direct=NEON_URL,
     )
-    verify_local_test_database(settings)
+    verify_test_database(settings)
     assert calls == []
 
 
@@ -151,7 +151,7 @@ def test_live_check_not_run_when_static_rules_refuse(monkeypatch: pytest.MonkeyP
     url = f"postgresql://owner:{PASSWORD}@localhost/neondb"
     settings = neon_test_settings(database_url=url, database_url_direct=url)
     with pytest.raises(ConfigurationError, match="loopback"):
-        verify_local_test_database(settings)
+        verify_test_database(settings)
     assert calls == []
 
 

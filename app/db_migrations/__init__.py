@@ -11,7 +11,7 @@ from app.db_migrations.guard import (
     confirm_neon_test_database,
     validate_migration_target,
     validate_test_database_target,
-    verify_local_test_database,
+    verify_test_database,
 )
 from app.db_migrations.session import database_session, dispose_database
 
@@ -31,5 +31,5 @@ __all__ = [
     "validate_test_database_target",
     "confirm_local_test_database",
     "confirm_neon_test_database",
-    "verify_local_test_database",
+    "verify_test_database",
 ]

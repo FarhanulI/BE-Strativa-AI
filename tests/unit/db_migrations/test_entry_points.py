@@ -37,12 +37,12 @@ def calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
     monkeypatch.setattr(command, "check", lambda *a, **k: recorded.append("check"))
     monkeypatch.setattr(
         db_migrations,
-        "verify_local_test_database",
+        "verify_test_database",
         lambda settings: recorded.append("live-check"),
     )
     monkeypatch.setattr(
         database_setup,
-        "verify_local_test_database",
+        "verify_test_database",
         lambda settings: recorded.append("live-check"),
     )
     return recorded

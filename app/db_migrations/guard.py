@@ -124,12 +124,12 @@ async def _verify_test_database(settings: Settings, *, neon: bool) -> None:
         await engine.dispose()
 
 
-def verify_local_test_database(settings: Settings) -> None:
+def verify_test_database(settings: Settings) -> None:
     """Run the live check for the selected mode after the static guard has passed.
 
     Local mode checks the local marker; Neon mode with APP_ENV=test checks the Neon marker. In
     Neon mode for any other APP_ENV nothing runs and nothing connects (the static rules govern
-    dev and prod). The name is historical; it covers both modes.
+    dev and prod). Serves both modes.
     """
     if settings.test_db_mode == "local":
         validate_test_database_target(settings)

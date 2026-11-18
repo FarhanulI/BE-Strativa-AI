@@ -12,7 +12,7 @@ from app.core import ConfigurationError, CursorPage, CursorParams, ProblemDetail
 from app.db_migrations import (
     direct_engine,
     validate_test_database_target,
-    verify_local_test_database,
+    verify_test_database,
 )
 
 
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     try:
         configured = Settings()
         validate_test_database_target(configured)
-        verify_local_test_database(configured)
+        verify_test_database(configured)
     except ConfigurationError as error:
         raise SystemExit(str(error)) from None
     asyncio.run(verify(configured))
