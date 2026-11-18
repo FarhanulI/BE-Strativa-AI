@@ -9,11 +9,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core import Settings
 from app.db_migrations.engine import build_async_engine
-from app.db_migrations.guard import LOCAL_TEST_DB_MARKER
 from tests.helpers.audit_teardown import (
     NOT_ENABLED_MESSAGE,
     REFUSED_MESSAGE,
     AuditTeardownError,
+    active_marker,
     current_trigger_state,
     delete_audit_rows,
 )
@@ -82,7 +82,7 @@ async def test_helper_refuses_on_a_database_without_the_marker(marker: object) -
 
 
 async def test_helper_fails_when_the_trigger_is_still_disabled_afterwards() -> None:
-    fake = _FakeSession(LOCAL_TEST_DB_MARKER, trigger="D")
+    fake = _FakeSession(active_marker(), trigger="D")
     with pytest.raises(AuditTeardownError) as raised:
         await delete_audit_rows(fake, resource_type="ai_budget", resource_ids=["x"])
     assert str(raised.value) == NOT_ENABLED_MESSAGE

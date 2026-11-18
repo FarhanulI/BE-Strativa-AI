@@ -4,8 +4,9 @@
 rows can only remove them by disabling that one trigger for the length of its own transaction. That
 is destructive, so the helper:
 
-* refuses unless the connected database carries the local throwaway marker (the same constant the
-  migration guard checks), with a fixed message,
+* refuses unless the connected database carries the marker of the active mode (the local
+  throwaway marker in local mode, the Neon test branch marker in Neon mode; both constants come
+  from the migration guard), with a fixed message,
 * re-enables the trigger and then reads ``pg_trigger`` to verify that it is not disabled.
 
 Both failures raise ``AuditTeardownError``. The caller runs the helper inside a transaction, so a
@@ -14,20 +15,27 @@ failure rolls the whole transaction back and the trigger is never left disabled.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import text
 
-from app.db_migrations.guard import LOCAL_TEST_DB_MARKER
+from app.db_migrations.guard import LOCAL_TEST_DB_MARKER, NEON_TEST_MARKER
 
 TRIGGER_NAME = "audit_log_immutable"
-REFUSED_MESSAGE = "audit teardown refused: database lacks the local test database marker"
+REFUSED_MESSAGE = "audit teardown refused: database lacks the test database marker for this mode"
 NOT_ENABLED_MESSAGE = "audit teardown failed: the audit_log trigger is not enabled afterwards"
 
 
 class AuditTeardownError(RuntimeError):
     """Fixed message only: no ids, values or connection details."""
+
+
+def active_marker() -> str | None:
+    """Marker of the active mode. Unset TEST_DB_MODE means Neon, as in ``Settings``."""
+    mode = os.environ.get("TEST_DB_MODE") or "neon"
+    return {"local": LOCAL_TEST_DB_MARKER, "neon": NEON_TEST_MARKER}.get(mode)
 
 
 async def current_trigger_state(session: Any) -> str | None:
@@ -50,7 +58,8 @@ async def delete_audit_rows(
     marker = (
         await session.execute(text("SELECT current_setting('app.test_db_marker', true)"))
     ).scalar()
-    if marker != LOCAL_TEST_DB_MARKER:
+    expected = active_marker()
+    if expected is None or marker != expected:
         raise AuditTeardownError(REFUSED_MESSAGE)
     await session.execute(text(f"ALTER TABLE audit_log DISABLE TRIGGER {TRIGGER_NAME}"))
     await session.execute(
