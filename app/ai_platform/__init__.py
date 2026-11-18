@@ -29,6 +29,7 @@ from app.ai_platform.errors import (
     AiProviderUnavailable,
     AiTaskNotReady,
 )
+from app.ai_platform.fake_provider import FakeAiProvider, ScriptedResponse
 from app.ai_platform.requests import (
     AiContextBlock,
     AiPart,
@@ -73,11 +74,13 @@ __all__ = [
     "AudioPart",
     "CostClass",
     "EmbeddingLimits",
+    "FakeAiProvider",
     "ImagePart",
     "LatencyClass",
     "MediaRef",
     "OutputSchemaRegistry",
     "QualityClass",
+    "ScriptedResponse",
     "TaskScope",
     "TextPart",
     "VideoPart",
