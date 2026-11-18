@@ -118,6 +118,24 @@ docker rm -f strativa-test-db                           # just test-db-down (dat
 `/run-db-suite [all | tests/db/<file>.py]` (Claude Code skill, manual only) starts the container, runs the suite through the real guard, redacts the password from the output and always cleans up (`scripts/run_db_suite.sh`).
 `TEST_DB_PASSWORD` must be set in the shell before starting the agent (for example `read -rs TEST_DB_PASSWORD; export TEST_DB_PASSWORD`); the agent never sets, accepts or prints it.
 
+### Neon mode in detail
+
+Neon runs are a separately authorised task (see the standing rules); they never happen as a side effect of another task.
+
+Prerequisites, all set up by the owner:
+
+- A dedicated Neon test branch, labelled `NEON_BRANCH_NAME=test`, never the dev or production branch.
+- `.env.test.local` created by the owner and git-ignored, with `APP_ENV=test`, `NEON_BRANCH_NAME=test` and the pooled and direct URLs of the test branch. `APP_ENV=test` (and `TEST_DB_MODE=neon`, or unset) must also be exported in the process environment.
+- The marker, set once by the owner on the test branch only: `ALTER DATABASE <dbname> SET app.test_db_marker = 'neon-test-branch-v1';`
+
+How it works: after the static rules (label must equal the `APP_ENV` label, loopback and unix-socket hosts refused) the guard connects once through the direct URL, before any migration, and requires `current_database()` to equal the database name in the URL and `current_setting('app.test_db_marker', true)` to equal `neon-test-branch-v1`. A missing, empty, differently cased or padded marker, or the local marker, is refused with a fixed message, and the Neon marker is likewise refused in local mode. No Neon host pattern is consulted; the marker is the evidence. The live check never runs for `APP_ENV` dev or prod. The audit teardown helper accepts the marker of the active mode only.
+
+A Neon run applies the migrations to the test branch (`alembic upgrade head`). Reversibility and downgrade tests never run in Neon mode; they require local mode.
+
+Pooled endpoint caveat: migrations, the live check and the gate check use the direct URL. A direct URL whose host contains `-pooler` points at the pooler, which is not suitable for DDL; the gate check reports this as `pooled_endpoint`.
+
+Read-only gate check, which touches nothing and prints no URL, host or credential: `uv run python scripts/neon_gate_check.py [--counts]`. It prints `mode`, `label_ok`, `marker_ok`, `pooled_endpoint`, `server_major_version`, `extensions` (names), `audit_trigger_enabled` and, with `--counts`, row counts of `ai_requests`, `ai_usage_records`, `ai_budget_periods`, `workspaces`, `users`, `outbox_events` and `audit_log`. Exit code 0 only when `label_ok` and `marker_ok` are both true; it refuses local mode and `APP_ENV` dev or prod.
+
 SQLite is never a substitute. Tests never run against the dev or production databases. A scheduled nightly run on the Neon `test` branch is planned as a later delivery-phase job and is not defined yet.
 
 See `docs/specs/` for module specs and `docs/reports/phase0-verification.md` for verification commands.
