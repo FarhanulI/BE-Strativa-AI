@@ -8,6 +8,7 @@ from app.db_migrations.engine import (
 )
 from app.db_migrations.guard import (
     confirm_local_test_database,
+    confirm_neon_test_database,
     validate_migration_target,
     validate_test_database_target,
     verify_local_test_database,
@@ -29,5 +30,6 @@ __all__ = [
     "validate_migration_target",
     "validate_test_database_target",
     "confirm_local_test_database",
+    "confirm_neon_test_database",
     "verify_local_test_database",
 ]
