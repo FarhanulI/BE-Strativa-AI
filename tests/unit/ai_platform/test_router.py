@@ -808,6 +808,114 @@ def test_cost_ceiling_and_budget_boundaries_are_inclusive() -> None:
     )
 
 
+# --- router clarifications (rev 5 and rev 6: D-24, D-25, D-30, D-31) ---
+
+
+@pytest.mark.parametrize("latency", list(LatencyClass))
+def test_model_name_sorts_before_provider_and_provider_decides_equal_names(
+    latency: LatencyClass,
+) -> None:
+    task = task_of(latency=latency)
+    # Equal in every earlier key: the smaller model name wins even on the larger provider id.
+    cross = run(
+        _priced("b", 100, 10_000, provider=P1), _priced("a", 100, 10_000, provider=P2), task=task
+    )
+    assert [(c.provider, c.model) for c in cross.candidates] == [(P2, "a"), (P1, "b")]
+    cross_reversed = run(
+        _priced("b", 100, 10_000, provider=P2), _priced("a", 100, 10_000, provider=P1), task=task
+    )
+    assert [(c.provider, c.model) for c in cross_reversed.candidates] == [(P1, "a"), (P2, "b")]
+    # Equal model names: the provider decides.
+    same = run(
+        _priced("m", 100, 10_000, provider=P2), _priced("m", 100, 10_000, provider=P1), task=task
+    )
+    assert [c.provider for c in same.candidates] == sorted([P1, P2])
+
+
+def test_supports_json_schema_changes_neither_ranking_nor_snapshot() -> None:
+    def build(flag_x: bool, flag_y: bool) -> RoutingResult:
+        return run(
+            _priced("x", 100, 10_000, supports_json_schema=flag_x),
+            _priced("y", 100, 20_000, supports_json_schema=flag_y),
+        )
+
+    results = [build(True, False), build(False, True), build(True, True), build(False, False)]
+    for result in results[1:]:
+        assert result.candidates == results[0].candidates
+        assert result.snapshot_json() == results[0].snapshot_json()
+        assert order(result) == ["x", "y"]
+
+
+def test_one_estimate_serves_the_ceiling_the_budget_and_the_candidate() -> None:
+    estimate = run(entry("m")).candidates[0].estimated_cost_micro_usd
+    assert estimate > 1
+    exact = run(entry("m"), cost_ceiling_micro_usd=estimate, remaining_budget_micro_usd=estimate)
+    assert order(exact) == ["m"]
+    assert exact.candidates[0].estimated_cost_micro_usd == estimate
+    lower_ceiling = run(
+        entry("m"), cost_ceiling_micro_usd=estimate - 1, remaining_budget_micro_usd=estimate
+    )
+    assert lower_ceiling.failure is RoutingFailure.NO_ROUTE
+    assert reasons(lower_ceiling) == {"m": "cost_class"}
+    lower_budget = run(
+        entry("m"), cost_ceiling_micro_usd=estimate, remaining_budget_micro_usd=estimate - 1
+    )
+    assert lower_budget.failure is RoutingFailure.BUDGET_EXCEEDED
+    assert reasons(lower_budget) == {"m": "budget"}
+
+
+def test_effective_max_output_units_is_the_clamped_value() -> None:
+    result = run(
+        entry("low-cap", max_output_units=100),
+        entry("high-cap", max_output_units=8_000),
+        max_output_units=500,
+        task=task_of(latency=LatencyClass.BATCH),
+    )
+    by_model = {c.model: c.effective_max_output_units for c in result.candidates}
+    assert by_model == {"low-cap": 100, "high-cap": 500}
+
+
+def test_effective_max_output_units_is_none_for_embedding() -> None:
+    result = _embed_input(embed("embed-a"))
+    assert [c.effective_max_output_units for c in result.candidates] == [None]
+
+
+@pytest.mark.parametrize("model_max", [100, 500, 8_000])
+def test_effective_max_output_units_is_the_context_fit_boundary(model_max: int) -> None:
+    padded = 1_100  # 1000 input units with the 10 percent margin
+    effective = run(entry("m", max_output_units=model_max)).candidates[0]
+    assert effective.effective_max_output_units == min(500, model_max)
+    window = padded + (effective.effective_max_output_units or 0)
+    assert order(run(entry("m", max_output_units=model_max, context_window_units=window))) == ["m"]
+    beyond = run(entry("m", max_output_units=model_max, context_window_units=window - 1))
+    assert beyond.failure is RoutingFailure.INPUT_TOO_LARGE
+
+
+def test_a_pinned_model_is_refused_for_a_non_embedding_task() -> None:
+    with pytest.raises(ValueError, match="pinned"):
+        build_input(catalog_of(entry("a")), pinned=(P1, "a"))
+
+
+def test_a_pinned_embedding_model_still_has_no_fallback() -> None:
+    result = _embed_input(embed("embed-a"), embed("embed-b"), pinned=(P1, "embed-b"))
+    assert order(result) == ["embed-b"]
+    unavailable = _embed_input(
+        embed("embed-a"),
+        embed("embed-b"),
+        pinned=(P1, "embed-b"),
+        unavailable_models=frozenset({(P1, "embed-b")}),
+    )
+    assert unavailable.failure is RoutingFailure.NO_ROUTE
+
+
+def test_interactive_ranks_the_fastest_first_and_other_classes_the_cheapest_first() -> None:
+    models = (_priced("slow-cheap", 900, 10_000), _priced("fast-dear", 100, 900_000))
+    interactive = run(*models, task=task_of(latency=LatencyClass.INTERACTIVE))
+    assert order(interactive) == ["fast-dear", "slow-cheap"]
+    for latency in (LatencyClass.STANDARD, LatencyClass.BATCH):
+        assert order(run(*models, task=task_of(latency=latency))) == ["slow-cheap", "fast-dear"]
+
+
 # --- purity ---
 
 _FORBIDDEN_MODULES = {"litellm", "datetime", "time", "random", "os", "sys"}
