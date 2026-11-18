@@ -1,8 +1,8 @@
 # AI Platform Module Specification
 
-Status: approved by owner (rev 4). Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec. Revision 4 records the owner's reopened embedding decision (D-21): Perplexity `pplx-embed-v1-0.6b` through the hosted Perplexity API at its native 1024 dimensions replaces OpenAI `text-embedding-3-small`; it adds the embedding wire format (5.3), configurable embedding limits, two open questions (section 19) and verified implementation inputs (20.4). The final rev 4 approval records D-22 (key variable and explicit key passing) and D-23 (the total request limit). (approved rev 3; schema correction applied; approved rev 4)
+Status: approved by owner (rev 4); clarifications and decisions recorded (rev 5). Authored 2026-11-01 from `docs/product-architecture.md` and `docs/modules.md` (the sources of truth) and from the real Phase 0/1 code. Revised 2026-11-02 to apply the owner's decisions (section 20) and the review fixes, and revised again (rev 2) to apply the owner's delta decisions: 30-day retention, cron-triggered jobs, Gemini-only chat with billing modes, lease fencing, budget reconciliation, error classification, config-driven budget limits and the sync request lifecycle. Revision 3 records the remaining owner decisions (D-16 to D-19: real embedding test key, ledger cascade, budget `state`, provider-level billing mode and metered cost) and two precision fixes. It is a new specification, not a restoration of any earlier `ai_platform` spec. Revision 4 records the owner's reopened embedding decision (D-21): Perplexity `pplx-embed-v1-0.6b` through the hosted Perplexity API at its native 1024 dimensions replaces OpenAI `text-embedding-3-small`; it adds the embedding wire format (5.3), configurable embedding limits, two open questions (section 19) and verified implementation inputs (20.4). The final rev 4 approval records D-22 (key variable and explicit key passing) and D-23 (the total request limit). (approved rev 3; schema correction applied; approved rev 4) Revision 5 records the clarifications verified against the implemented budget, usage and Router code (5.5, 6, 10.2, 10.5, 12.2) and the owner decisions D-24 to D-29 (reservation amount, structured output, per-task output defaults, privacy gate, quality-class routing, embedding batching ownership), with AC-59 and AC-60 and three new Open Questions (OQ-3 to OQ-5). No numbering of earlier decisions, invariants or acceptance criteria changed.
 
-No provisional markers remain in rev 3. Revision 4 leaves two undecided Open Questions in section 19 (OQ-1 and OQ-2), both about embeddings. Section 20 lists the decided items, the one prerequisite task (P-2), the operational prerequisites and the implementation inputs.
+No provisional markers remain in rev 3. Revision 4 left two undecided Open Questions in section 19 (OQ-1 and OQ-2), both about embeddings, and revision 5 adds OQ-3, OQ-4 and OQ-5. Section 20 lists the decided items, the one prerequisite task (P-2), the operational prerequisites and the implementation inputs.
 
 ## Backend
 
@@ -434,6 +434,12 @@ def register_routes(app) -> None: ...
 ```
 
 - `AiBudgetService` and `AiUsageService` take a workspace-scoped `AiCallContext`. Callers must already have passed the `ai:usage_read` check (section 15).
+- **Verified behavior of the two services (rev 5; read from the implementation).**
+  - Both services refuse a context without a workspace (a system context) with a plain `ValueError` (fixed message "a workspace-scoped AiCallContext is required"), before any read. It is not a `DomainError`, because only a coding error can produce such a context.
+  - `AiUsageService.get_workspace_usage` validates in this order: the context, `group_by` (anything other than `task`, `model` or `day` is a `ValueError`), then `period_start`. A `period_start` that is not a `date` (a `datetime` is refused) or is not the first day of a month raises `ValueError`. A month after the current UTC month, measured with the injected `Clock`, raises `ValidationFailed`. The current month and every past month are accepted.
+  - Both services read in their own short read-only transaction and never write or commit.
+  - `AiBudgetService.get_status` always reports the configured workspace limit. A workspace with no row for the month reports zero `spent` and `reserved`.
+  - The state rule and `percent_used` are in section 6. Usage aggregation rules are in section 6.
 - A domain module registers the output schema it owns with `OutputSchemaRegistry.register(...)` at startup. This is how a task becomes ready. `AiTaskRegistry` is owned by `ai_platform`.
 - `check_ai_providers` (D-13) is a presence-only readiness helper in the style of `check_database`/`check_redis`. It never calls a provider, performs no network access and reveals no key material. `capability="embedding"` is `ok` only when the Perplexity key is present. `capability="generation"` is `ok` when at least one enabled catalog provider with a generation-capable model has its key present (today only Gemini). `rag` may call it at startup. `ai_platform` itself never fails at startup for a missing key.
 - Provider API keys are read by `AiPlatformConfig` as `SecretStr` from `PERPLEXITY_API_KEY` (Perplexity) and `GEMINI_API_KEY` (Gemini) (D-22). The adapter passes every provider key to LiteLLM explicitly through its `api_key` argument. `ai_platform` never relies on LiteLLM detecting provider keys from the environment, and the name LiteLLM documents for Perplexity (`PERPLEXITYAI_API_KEY`) is not read.
@@ -453,7 +459,7 @@ def register_routes(app) -> None: ...
 
 ### 5.7 Notes for dependent modules
 
-- **`rag`.** The embedding job must treat `AiBudgetExceeded` as "defer and retry later", not as a dead-letter failure. The `rag` spec defines the exact behavior (delay, attempt accounting). Workspace-scope embeddings (WORKSPACE/PROFILE knowledge) draw on the workspace budget. GLOBAL knowledge embeddings draw on the system budget. `rag` splits its work into batches that respect `EmbeddingService.limits` (D-23); `EmbeddingService` rejects an oversize batch and never splits one. A missing Perplexity key surfaces as `ConfigurationError` at call time. System-scope embeddings use `AiCallContext.system`, which only `rag` and `ai_platform` may build (D-15). `rag` may call `check_ai_providers(settings, capability="embedding")` at startup.
+- **`rag`.** The embedding job must treat `AiBudgetExceeded` as "defer and retry later", not as a dead-letter failure. The `rag` spec defines the exact behavior (delay, attempt accounting). Workspace-scope embeddings (WORKSPACE/PROFILE knowledge) draw on the workspace budget. GLOBAL knowledge embeddings draw on the system budget. `rag` splits its work into batches that respect `EmbeddingService.limits` (D-23); `EmbeddingService` rejects an oversize batch and never splits one. Guidance for `rag` (D-29): batch splitting, chunking of long texts, retry on a provider rate limit with exponential backoff and jitter, concurrency limits, and never silently dropping an input all belong to `rag`, not to `ai_platform`. `EmbeddingService` only validates and never splits, chunks, drops or retries (D-23). The three limit values are configuration defaults set in the catalog step from the official Perplexity Standard Embeddings page (fetched by the owner on 2026-11-17, source recorded at that step). They are not written as numbers in this spec. A missing Perplexity key surfaces as `ConfigurationError` at call time. System-scope embeddings use `AiCallContext.system`, which only `rag` and `ai_platform` may build (D-15). `rag` may call `check_ai_providers(settings, capability="embedding")` at startup.
 - **Domain modules** own and version their prompts and their output schemas (D-6). They authorize the user for their own action before calling. On a user request path they may call `run` only for `interactive` tasks; everything else uses `submit` (D-7). An async request refused for budget ends `failed` with `error_code = budget_exceeded`.
 - **`context_engine`** supplies the context blocks. It must not rely on `ai_platform` to trim them.
 
@@ -479,6 +485,8 @@ It exposes two **read-only** endpoints so that workspace OWNER/ADMIN can see the
 - `percent_used` (integer, `floor(100 * spent / limit)`, settled spend only)
 - `state` (D-18), computed from the current configured limit and the current counters only: `exhausted` when `spent + reserved >= limit`; else `warning` when `spent * 100 >= 80 * limit`; else `ok`. The notification flags `warning_notified_at` and `exhausted_notified_at` do not take part in it.
 
+A limit of 0 reports `percent_used` 100, `remaining_micro_usd` 0 and `state` `exhausted` (the `spent + reserved >= limit` test holds at zero). `state` is computed only from `spent`, `reserved` and the current configured limit, never from the notification flags.
+
 `limit_micro_usd` is the current configured workspace limit for the current period (D-9) and the row's stored limit for past periods. A workspace with no row yet this month reports the configured limit and zero counters. After a mid-month limit change `state` follows the new limit at once (for example it returns from `exhausted` to `ok` after a raise), while the notification flags stay set (D-18).
 
 `GET /usage` response `AiUsageReport`:
@@ -488,6 +496,14 @@ It exposes two **read-only** endpoints so that workspace OWNER/ADMIN can see the
 - `groups`: a list of `{key, call_count, failed_call_count, input_units, output_units, cost_micro_usd}`
 
 `cost_micro_usd` in `totals` and `groups` is the **metered cost** at the catalog list price (12.2). It is the application's accounting figure, not the provider's invoice: a free-tier call may be invoiced 0.
+
+Aggregation rules (rev 5; read from the implementation), for the workspace and the `period_start` month only:
+
+- Usage records still in status `reserved` (in flight) are excluded from every figure.
+- `call_count` counts the records in status `succeeded`, `failed` and `abandoned`. `failed_call_count` counts those in status `failed` or `abandoned`.
+- A record whose `input_units` or `output_units` is NULL counts as 0 in the sums.
+- With `group_by=day`, the group `key` is the UTC calendar day of the record's `started_at`, as an ISO date string (`YYYY-MM-DD`). With `task` or `model` it is the stored task name or model id. Groups are returned sorted by `key` ascending, and `totals` is the sum of the groups.
+- A month with no records (for example a past month with no data) returns zero totals and an empty `groups` list.
 
 Groups are bounded (task ≤ 9, model ≤ catalog size, day ≤ 31), so there is no cursor. Both endpoints:
 
@@ -620,16 +636,18 @@ Classes (initial configuration defaults, tunable in config, pinned by tests):
 
 Capabilities (§45) say what a task needs from a model. `retrieval_grounding` means "the task consumes caller-supplied, source-tagged context blocks". `ai_platform` does not retrieve.
 
-| Task | Capabilities | Output schema (name, v1) | Quality | Latency | Cost | Modalities in → out | Allowed scopes (D-15) |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `ANALYZE_MARKET_TRENDS` | text_generation, reasoning, retrieval_grounding, structured_output | `MarketTrendAnalysis` | standard | batch | medium | text → text | workspace |
-| `GENERATE_CONTENT_BRIEF` | text_generation, reasoning, retrieval_grounding, structured_output | `ContentBriefDraft` | high | standard | high | text → text | workspace |
-| `GENERATE_CHANNEL_EXECUTION` | text_generation, retrieval_grounding, structured_output | `ChannelExecutionDraft` | standard | standard | medium | text → text | workspace |
-| `GENERATE_CONTENT_DRAFT` | text_generation, retrieval_grounding, structured_output | `ContentDraftOutput` | high | standard | high | text → text | workspace |
-| `GENERATE_HOOK_VARIATIONS` | text_generation, structured_output | `HookVariationSet` | standard | interactive | low | text → text | workspace |
-| `ANALYZE_PERFORMANCE` | text_generation, reasoning, retrieval_grounding, structured_output | `PerformanceAnalysis` | high | batch | medium | text → text | workspace |
-| `EXTRACT_AUDIENCE_SIGNALS` | text_generation, retrieval_grounding, structured_output | `AudienceSignalExtraction` | standard | batch | low | text → text | workspace |
-| `SYNTHESIZE_SIGNALS` | text_generation, reasoning, structured_output | `SignalSynthesisResult` | standard | batch | medium | text → text | workspace |
+| Task | Capabilities | Output schema (name, v1) | Quality | Latency | Cost | Default `max_output_units` (D-26) | Modalities in → out | Allowed scopes (D-15) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ANALYZE_MARKET_TRENDS` | text_generation, reasoning, retrieval_grounding, structured_output | `MarketTrendAnalysis` | standard | batch | medium | 4000 | text → text | workspace |
+| `GENERATE_CONTENT_BRIEF` | text_generation, reasoning, retrieval_grounding, structured_output | `ContentBriefDraft` | high | standard | high | 6000 | text → text | workspace |
+| `GENERATE_CHANNEL_EXECUTION` | text_generation, retrieval_grounding, structured_output | `ChannelExecutionDraft` | standard | standard | medium | 4000 | text → text | workspace |
+| `GENERATE_CONTENT_DRAFT` | text_generation, retrieval_grounding, structured_output | `ContentDraftOutput` | high | standard | high | 8000 | text → text | workspace |
+| `GENERATE_HOOK_VARIATIONS` | text_generation, structured_output | `HookVariationSet` | standard | interactive | low | 1500 | text → text | workspace |
+| `ANALYZE_PERFORMANCE` | text_generation, reasoning, retrieval_grounding, structured_output | `PerformanceAnalysis` | high | batch | medium | 4000 | text → text | workspace |
+| `EXTRACT_AUDIENCE_SIGNALS` | text_generation, retrieval_grounding, structured_output | `AudienceSignalExtraction` | standard | batch | low | 3000 | text → text | workspace |
+| `SYNTHESIZE_SIGNALS` | text_generation, reasoning, structured_output | `SignalSynthesisResult` | standard | batch | medium | 4000 | text → text | workspace |
+
+**Default `max_output_units` (D-26).** Each generation task has a default maximum number of output units, in the column above. `EMBED_TEXT` has none (it produces no generated output). The caller of the Router resolves exactly one value, `min(request value, task default, model maximum)`. A request value can only lower the default (5.1). The Router additionally clamps that value to each candidate model's own maximum (10.2). The provider adapter must send exactly the effective value for the selected model, and the context-fit check, the cost estimate and the reservation all use that same value (12.2). Output units include any reasoning ("thinking") units that the provider bills as output. How a provider-specific reasoning budget interacts with the cap is open (OQ-3). The defaults are configuration defaults, pinned by AC-5.
 
 The first eight rows are the example tasks listed in §44. The `GENERATE_CONTENT_BRIEF` capability set is the one given as the example in §45 (Text Generation, Retrieval, Reasoning, Structured Output).
 
@@ -666,21 +684,43 @@ The Router is a pure, deterministic function of `(task definition, request, cata
 
 ### 10.2 Selection, in order
 
-1. **Capability and modality filter.** Keep models that are `enabled` and support every capability the task requires. Every modality present in the request (input) and required by the task (output) must be supported. A rejected model gets reason code `capability` or `modality`.
+1. **Capability and modality filter.** Keep models that are `enabled` and support every capability the task requires. Every modality present in the request (input) and required by the task (output) must be supported. A rejected model gets reason code `disabled` (checked first), `capability` or `modality`, in that order.
 2. **Provider configured.** Drop models whose provider key is absent. Reason code `not_configured`. If this step is the only reason the list becomes empty, the call raises `ConfigurationError` (D-13), not `AiNoRoute`.
-3. **Context fit.** Estimated input units, using LiteLLM's counter plus a configurable safety margin (default 10 %), plus the call's `max_output_units`, must fit `context_window_units`. Reason code `context`. If every model fails only here, raise `AiInputTooLarge`.
+3. **Context fit.** Estimated input units, using LiteLLM's counter plus a configurable safety margin (default 10 %), plus the call's `max_output_units` clamped to this model's own maximum, must fit `context_window_units`. The padded input is `ceil(units × (100 + margin) / 100)` in integer arithmetic, and it is also the input figure of the cost estimate (12.2). For an embedding task the output part is 0. Reason code `context`. If every model fails only here, raise `AiInputTooLarge`.
 4. **Quality floor.** `quality_tier >= max(task.quality, request.quality_floor)`. A request can only raise the floor. Reason code `quality`.
-5. **Cost ceiling.** The estimated worst-case cost of one call (formula in 12.2) must be ≤ the task's cost-class ceiling. Reason code `cost_class`.
+5. **Cost ceiling.** The estimated worst-case cost of one call (formula in 12.2) must be ≤ the task's cost-class ceiling. Reason code `cost_class`. The estimate is the single per-candidate figure of D-24: the same value is used here, in step 7 and on the selected candidate.
 6. **Availability.** Drop models whose circuit breaker is open (10.4). Reason code `unavailable`.
 7. **Budget.** The estimated cost must fit the remaining budget of the one row the call uses (`limit - spent - reserved`, read as a snapshot): the workspace row for a workspace-scope call, the system row for a system-scope call. If steps 1–6 left candidates but this step removes all of them, raise `AiBudgetExceeded`. The atomic reservation in 12.3 is still the authority. The snapshot only keeps the Router from proposing hopeless candidates.
-8. **Rank.** Sort the remaining candidates lexicographically. The final key is always `model` ascending, so ties are deterministic.
-   - `interactive`: (`latency_p50_ms` asc, estimated cost asc, `model` asc)
-   - `standard`: (estimated cost asc, `latency_p50_ms` asc, `model` asc)
-   - `batch`: (estimated cost asc, `model` asc)
+8. **Rank.** Sort the remaining candidates lexicographically. The final keys are always `model` ascending and then `provider` ascending, so ties are deterministic.
+   - `interactive`: (`latency_p50_ms` asc, estimated cost asc, `model` asc, `provider` asc)
+   - `standard`: (estimated cost asc, `latency_p50_ms` asc, `model` asc, `provider` asc)
+   - `batch`: (estimated cost asc, `model` asc, `provider` asc)
 9. **Billing-mode lock.** Keep only candidates whose `billing_mode` (derived from the provider's configuration, 10.1) equals that of the first-ranked candidate. The rest get reason code `billing_mode`. The request never uses a candidate of the other billing mode, so a `free_tier` request never falls back to a `paid` candidate, and the reverse (INV-29).
-10. If no candidate remains and the cause was not budget, context or missing provider keys, raise `AiNoRoute`. For embeddings the candidate list is exactly the pinned model (`pplx-embed-v1-0.6b`), or `AiNoRoute` if it is unavailable.
+10. If no candidate remains, the failure kind follows the table below. A cause that is not budget, context, missing provider keys or a step 1 modality rejection raises `AiNoRoute`. For embeddings the candidate list is exactly the pinned model (`pplx-embed-v1-0.6b`), or `AiNoRoute` if it is unavailable.
 
 Quality is a floor, not an objective. Among eligible models the cheapest (or, for `interactive`, the fastest) wins. This keeps selection simple and predictable (§62).
+
+**Quality-class routing (D-28).** Routing follows the task's quality class and cost. A task of quality class `high` (`GENERATE_CONTENT_BRIEF`, `GENERATE_CONTENT_DRAFT`, `ANALYZE_PERFORMANCE`) can run only on `high`-tier models (step 4). A task of class `standard` runs on the best-ranked eligible model of step 8, which is the cheapest for the `standard` and `batch` latency classes, and may fall back to the other eligible model of the same billing mode (step 9). For the `interactive` latency class step 8 ranks the fastest model first (see OQ-5). Task quality classes are unchanged. A description of what a model is "for" is not a routing rule.
+
+**Router behavior verified against the implementation (rev 5).**
+
+- The Router is a pure function. A `RoutingInput` carries the already-resolved values: the padded-input parameters, one `max_output_units` (`None` for an embedding task, required for a generation task), the cost-class ceiling in micro-USD, the remaining budget in micro-USD (not negative), the provider-configured and billing-mode maps, the unavailable set, an optional pinned `(provider, model)`, the routing version and the catalog. Invalid input raises `ValueError`. A candidate whose provider has no billing mode in the map also raises `ValueError`. Every other outcome is a `RoutingResult`; the Router never raises a domain error. `routing_error_class` maps a failure kind to the error class and never raises it.
+- **Per-model clamp.** The caller passes one resolved `max_output_units` (D-26). For each model the Router uses `min(value, model maximum)`, or the value itself when the catalog entry has no maximum. For an embedding task the output part is 0. The same clamped value feeds step 3 and the cost estimate.
+- **Pinned model.** When a pinned `(provider, model)` is given, only that model is considered. If it is absent from the catalog the considered list is empty (failure `no_route`, empty snapshot). A disabled, unconfigured or unavailable pinned model fails at its own step. There is no fallback to another model.
+- **Failure kind.** The failure is decided by the step at which the candidate list became empty:
+
+| List became empty at | Failure kind | Error class |
+| --- | --- | --- |
+| The list to consider was empty from the start (empty catalog, or pinned model not in the catalog) | `no_route` | `AiNoRoute` |
+| Step 1, and at least one model was rejected with reason `modality` | `modality_not_supported` | `AiModalityNotSupported` |
+| Step 1, no model rejected for `modality` (only `disabled` or `capability`) | `no_route` | `AiNoRoute` |
+| Step 2 | `provider_not_configured` | `AiProviderNotConfigured` |
+| Step 3 | `input_too_large` | `AiInputTooLarge` |
+| Step 4, 5 or 6 | `no_route` | `AiNoRoute` |
+| Step 7 | `budget_exceeded` | `AiBudgetExceeded` |
+
+  Step 9 never empties the list. A result has a failure exactly when it has no candidates.
+- **Result.** Each selected candidate carries `provider`, `model`, `billing_mode`, `estimated_cost_micro_usd` and `route_rank` (starting at 1). The Router never reads `supports_json_schema` (D-25).
 
 ### 10.3 Fallback and failure behavior
 
@@ -719,13 +759,15 @@ Per call attempt, an `ai_usage_records` row stores:
 - `route_rank` (position in the ordered list),
 - `candidate_snapshot` (every considered model with `eligible` and a `reason_code`; ids and codes only).
 
+The snapshot produced by the Router is a list of entries `{provider, model, eligible, reason_code}`, with `reason_code` null for an eligible model. The eligible candidates come first in rank order. The ineligible ones follow, ordered by `(provider, model)`. A model dropped by the billing-mode lock (step 9) is ineligible with reason `billing_mode`. The canonical JSON form uses sorted keys, no extra whitespace and ASCII only, so the same inputs give a byte-identical snapshot (INV-5).
+
 `ai_requests.routing_version` records the rules version. The final record's id is returned as the opaque `routing_id`. Together these answer "which model served this, why, and what else was considered" without logging content.
 
 ## 11. Strict output-schema enforcement
 
 - Every registry task except `EMBED_TEXT` has a registered output schema. A "free text" task does not exist.
 - A registered schema must be a Pydantic v2 `BaseModel` with `extra="forbid"`. `OutputSchemaRegistry.register` rejects any other model, and rejects duplicate `(name, version)`.
-- **Request side:** the Router prefers models with `supports_json_schema` and the adapter passes the schema as a structured-output request (`response_format`). Models without it are still allowed for tasks that need only `structured_output` via JSON mode, and the response is validated in the same way.
+- **Request side (D-25):** the Router does not rank or filter by `supports_json_schema`. The provider adapter inspects the selected model: it sends a JSON-schema `response_format` when the model supports it, and the provider's JSON mode otherwise. Strict application-level schema validation (below) is mandatory in both cases.
 - **Validation:** the raw output is parsed and validated with `model_validate_json(..., strict=True)`. There is no coercion, no extra keys, and no partial acceptance. Validation is the only gate. Provider-side schema support never replaces it.
 - **Truncation:** `finish_reason = length` is a failure with code `output_truncated`. It is not repairable. The orchestrator moves on to the next candidate.
 - **Repair policy:**
@@ -773,7 +815,8 @@ Units come from the provider response and are mapped to `input_units` and `outpu
 
 - Costs are integers: `cost = ceil(units × price_per_million / 1_000_000)` for input and output separately, then summed. Rounding up means the ledger never undercounts.
 - Catalog prices are the authority, versioned with `price_version` (D-4). LiteLLM's cost helper is not used for money. `billing_mode` does not change the computation: `cost_micro_usd` is the **metered cost at the catalog list price for both billing modes**. It is the application's accounting figure, used for budgets and for the 2 USD and 20 USD test guards. It is **not** the provider's invoice: a free-tier call may be invoiced 0.
-- **Reservation estimate** for a generation call = `ceil(estimated_input_units × in_price / 1e6) + ceil(max_output_units × out_price / 1e6)`. `max_output_units` is the lower of the request's value, the task default and the model's maximum. Embedding estimate = `ceil(estimated_input_units × in_price / 1e6)`.
+- **Reservation estimate** for a generation call = `ceil(estimated_input_units × in_price / 1e6) + ceil(max_output_units × out_price / 1e6)`. In the Router, `estimated_input_units` is the margin-padded input of 10.2 step 3, and `max_output_units` is the one value resolved by the caller as the lower of the request's value, the task default and the model's maximum (D-26), clamped again to each candidate model's own maximum. Output units include reasoning units billed as output. Embedding estimate = `ceil(estimated_input_units × in_price / 1e6)`.
+- **One authoritative figure (D-24).** The reservation amount of a call equals the selected candidate's Router-produced `estimated_cost_micro_usd`. That single figure is the only authoritative value for the cost-ceiling check (10.2 step 5), the budget check (step 7) and the reservation. The orchestrator never recalculates a different amount. The atomic reservation (12.3) still validates that amount against the live budget state.
 
 ### 12.3 Budgets
 
@@ -920,7 +963,7 @@ Minimal and read-only. It is justified because budget enforcement (80 % warning,
 
 ## 17. Acceptance criteria
 
-Fake-provider tests (AC-1 to AC-53 and AC-58) run by default on a local Postgres container with pgvector (marker `db`, with the existing session-scoped migration and rollback fixtures, plus committed-data fixtures for concurrency tests), and nightly on the Neon test branch. They never run on dev or production. They need no network and no provider key. The local-database mode of the test guard is prerequisite P-2 (section 20). The real-provider smoke test (AC-54 to AC-57) is a separate suite. Job handlers are invoked directly in tests. No cron and no scheduler is needed.
+Fake-provider tests (AC-1 to AC-53, AC-58 and AC-59) run by default on a local Postgres container with pgvector (marker `db`, with the existing session-scoped migration and rollback fixtures, plus committed-data fixtures for concurrency tests), and nightly on the Neon test branch. They never run on dev or production. They need no network and no provider key. The local-database mode of the test guard is prerequisite P-2 (section 20). The real-provider smoke test (AC-54 to AC-57) is a separate suite. Job handlers are invoked directly in tests. No cron and no scheduler is needed.
 
 ### 17.1 Architecture and contract (DB-free unless stated)
 
@@ -928,7 +971,7 @@ Fake-provider tests (AC-1 to AC-53 and AC-58) run by default on a local Postgres
 2. **AC-2.** An architecture test fails if a catalog provider or model identifier appears in `app/` outside `app/ai_platform/`, or inside it outside the catalog file, provider adapter and module configuration (INV-3).
 3. **AC-3.** Unit test: `AiTaskRequest` rejects unknown fields (including `model`, `provider` and `tools`). Reflection over `AiTaskRequest`, `AiTaskResult`, `AiRequestStatus` and the exception classes finds no field or message naming a provider or model (INV-2). Signature reflection shows `AiOrchestrator.run` and `EmbeddingService.embed_texts` have no idempotency parameter, and only `submit` has `idempotency_key` (F-1).
 4. **AC-4.** The module-boundary test passes with `ai_platform` imported only through `app.ai_platform`, and the package exports every name listed in section 5, including `check_ai_providers`, `AiProviderNotConfigured` and `AiPlatformConfig`.
-5. **AC-5.** The task registry contains exactly the eight §44 tasks with the capabilities, schema names, classes and allowed scopes in section 9, plus the internal `EMBED_TEXT`. A test pins the table, including the `EMBED_TEXT` classes: quality `standard`, latency `standard` (60 s deadline) and cost `low` (ceiling 20,000 micro-USD) (D-20). `EMBED_TEXT` cannot be built through `AiTaskRequest`.
+5. **AC-5.** The task registry contains exactly the eight §44 tasks with the capabilities, schema names, classes and allowed scopes in section 9, plus the internal `EMBED_TEXT`. A test pins the table, including the default `max_output_units` of each task (D-26: `GENERATE_HOOK_VARIATIONS` 1500, `EXTRACT_AUDIENCE_SIGNALS` 3000, `SYNTHESIZE_SIGNALS`, `ANALYZE_MARKET_TRENDS`, `ANALYZE_PERFORMANCE` and `GENERATE_CHANNEL_EXECUTION` 4000, `GENERATE_CONTENT_BRIEF` 6000, `GENERATE_CONTENT_DRAFT` 8000, `EMBED_TEXT` none) and the `EMBED_TEXT` classes: quality `standard`, latency `standard` (60 s deadline) and cost `low` (ceiling 20,000 micro-USD) (D-20). `EMBED_TEXT` cannot be built through `AiTaskRequest`.
 6. **AC-6.** Every `ai.*` event model is registered once in `DEFAULT_EVENT_REGISTRY`, forbids extra fields, and no field name matches `token`. `publish` accepts each of them (INV-18).
 7. **AC-7.** Settings and config validation:
    - `Settings(embedding_dim=1024)` is accepted, any other positive `embedding_dim` makes `build_ai_platform` raise `ConfigurationError`, and an unset value is accepted.
@@ -1032,6 +1075,8 @@ Fake-provider tests (AC-1 to AC-53 and AC-58) run by default on a local Postgres
     - Captured logs, events, audit rows, job payloads and error responses of a full run (success, schema failure, budget refusal) contain none of the test prompt, completion or output strings and no `token`-named key (INV-18, INV-19, INV-20).
 53. **AC-53.** `embed_texts` with the fake provider returns vectors of length 1024, `embedding_model="pplx-embed-v1-0.6b"`, `embedding_version="v1-d1024"`, and records usage against the budget row of the context's scope. Empty batches, batches larger than the configured `EMBED_MAX_BATCH`, empty texts texts over the configured `EMBED_MAX_TEXT_UNITS` and batches within the per-text and per-batch limits but above the configured `EMBED_MAX_REQUEST_UNITS` are rejected with `ValidationFailed` (`ai_input_too_large`) before any request row, reservation or provider call, and there is no fallback model (INV-12). One provider request is made per accepted batch (the fake provider counts one), and a batch is never split. `EmbeddingService.limits` exposes the three configured values. The fake provider path also covers the wire format (5.3): a response whose decoded length is not 1024 ends the call as `provider_bad_request` with no fallback, and the returned vectors are exactly the decoded values (no scaling, no normalization). The embedding call carries a 60 s deadline (D-20).
 58. **AC-58.** Lock order (INV-32, 12.3). With committed sessions, concurrent fenced settlements, reaper abandon statements and budget refusals run against the same request, usage and budget rows, repeated over many iterations. The test asserts that no deadlock or serialization failure occurs, that every settlement and abandon applies at most once, and that the INV-13 query (AC-36) holds for the budget rows afterwards.
+59. **AC-59.** Reservation equals the Router estimate (D-24, INV-10). Implemented with the orchestrator. For a routed call, the amount reserved for the chosen model equals exactly that candidate's Router-produced `estimated_cost_micro_usd`. For identical figures (the same cost, remaining budget and ceiling), the Router's within-budget decision and the atomic reservation never disagree: a candidate the Router passes at step 7 is admitted by a reservation against the same unchanged snapshot, and one it removes is refused by a reservation of that amount.
+60. **AC-60.** Catalog fitness (D-26, D-28). Implemented in the catalog step, DB-free. For every task and every catalog model eligible for it by capability, modality and quality: (a) the worst-case output cost at the task's default `max_output_units`, clamped to the model's maximum, does not exceed the task's cost-class ceiling (section 9); (b) the maximum input units the ceiling allows, `floor((ceiling − output cost) / input price)`, is at least a per-task `required_min_input_units`. That value is catalog configuration set in the catalog step from verified prices, and no number is written in this spec. The test prints the full (task, model) table and fails on a violation.
 
 ### 17.6 Real-provider smoke test (separate, small)
 
@@ -1060,7 +1105,7 @@ Operational prerequisites (not code, section 20.3): a dedicated Google project w
 | INV-7 | AC-15, AC-29, AC-37 |
 | INV-8 | AC-22, AC-23, AC-24 |
 | INV-9 | AC-27 |
-| INV-10 | AC-30, AC-33 |
+| INV-10 | AC-30, AC-33, AC-59 |
 | INV-11 | AC-31 |
 | INV-12 | AC-53, AC-55 |
 | INV-13 | AC-36, AC-46 |
@@ -1083,6 +1128,8 @@ Operational prerequisites (not code, section 20.3): a dedicated Google project w
 | INV-30 | AC-46, AC-47 |
 | INV-31 | AC-12, AC-31 |
 | INV-32 | AC-58 |
+
+AC-60 fits no invariant. It is a check of catalog data (prices and limits against the task defaults and ceilings), not of a runtime guarantee, so it has no row in this table.
 
 ## 18. Non-goals
 
@@ -1108,7 +1155,7 @@ Operational prerequisites (not code, section 20.3): a dedicated Google project w
 
 ## 19. Open Questions
 
-Two questions remain open and undecided: OQ-1 and OQ-2 below. There are no other open questions. The questions of revisions 1 to 3 are decided (D-16 to D-18) or moved to implementation inputs (20.4), and the two further rev 4 draft questions are decided as D-22 and D-23. Earlier "was OQ-n" notes in section 20 refer to earlier revisions. Any gap found later is added here with options and a recommendation.
+Five questions remain open and undecided: OQ-1 and OQ-2 (revision 4) and OQ-3 to OQ-5 (revision 5) below. There are no other open questions. The questions of revisions 1 to 3 are decided (D-16 to D-18) or moved to implementation inputs (20.4), and the two further rev 4 draft questions are decided as D-22 and D-23. Earlier "was OQ-n" notes in section 20 refer to earlier revisions. Any gap found later is added here with options and a recommendation.
 
 **OQ-1. Distance metric and normalization for embeddings.** The Perplexity API returns unnormalized embeddings.
 - Option A: store the vectors as returned and use cosine distance.
@@ -1119,11 +1166,27 @@ Two questions remain open and undecided: OQ-1 and OQ-2 below. There are no other
 **OQ-2. Perplexity terms and privacy for submitted content.** The current Perplexity terms of service and any data processing addendum are unverified.
 - Option A: the owner verifies them before any real user content is sent (same note as 20.3).
 - Option B: the owner verifies them before any real content, and only synthetic text is used until then.
-- **Recommendation:** Option A. This spec makes no claim about retention or training.
+- **Recommendation:** Option A. This spec makes no claim about retention or training. D-27 sets the hard rule that only synthetic text is sent until the owner records the privacy review.
+
+**OQ-3. Reasoning ("thinking") units and the output cap.** D-26 says `max_output_units` counts output units including reasoning units billed as output, and that the adapter sends exactly the effective value. The spec does not say how a provider-specific reasoning budget (a separate thinking-budget or reasoning-effort parameter, where the model has one) interacts with that cap.
+- Option A: the adapter sets the provider's reasoning budget so that reasoning plus visible output cannot exceed the effective cap, or disables reasoning where the model offers no way to bound it.
+- Option B: the cap applies to visible output only, and the reservation adds a separate configured reasoning allowance per model.
+- Option C: leave reasoning unbounded and rely on the provider's own limits.
+- **Recommendation:** Option A. Option B changes the reservation figure of D-24, and Option C can exceed the reserved estimate. The catalog step verifies, for each chosen model, whether thinking is billed as output and how it can be bounded.
+
+**OQ-4. How the effective `max_output_units` reaches the adapter.** D-26 requires the adapter to send exactly the value used for the context-fit check, the cost estimate and the reservation. The Router result today exposes, per selected candidate, `provider`, `model`, `billing_mode`, `estimated_cost_micro_usd` and `route_rank`, but not the per-model clamped output value.
+- Option A: add the per-candidate effective `max_output_units` to the Router result (`None` for an embedding task). The Router already computes it.
+- Option B: the orchestrator or adapter recomputes `min(resolved value, model maximum)` from the catalog.
+- **Recommendation:** Option A. It keeps one computation and makes AC-59 testable from the Router result alone.
+
+**OQ-5. Interactive ranking versus "cheapest first".** D-28 says a task of class `standard` runs on the cheapest eligible model first. Step 8 ranks the `interactive` latency class by latency first and cost second, and the only `standard`-quality `interactive` task is `GENERATE_HOOK_VARIATIONS`.
+- Option A: keep step 8 as it is. Cheapest first holds for the `standard` and `batch` latency classes, and `interactive` ranks fastest first.
+- Option B: rank every `standard`-quality task by cost first, which changes the `interactive` key in step 8, AC-14 and the Router.
+- **Recommendation:** Option A, because the latency class exists to protect the 20 s deadline of user-facing calls.
 
 ## 20. Decisions
 
-The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13 were Open Questions in the first draft (the former number is shown). Revision 2 changed D-2, D-4, D-5, D-9 and D-11, and added D-14 and D-15 (their "was OQ" numbers are first-draft numbers). Revision 3 changed D-4 and added D-16 to D-19 (D-16 to D-18 were the open questions OQ-2 to OQ-4 of revision 2). Revision 4 changed D-4 and D-16 and added D-21 to D-23 (D-22 and D-23 were the open questions OQ-3 and OQ-4 of the rev 4 draft).
+The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13 were Open Questions in the first draft (the former number is shown). Revision 2 changed D-2, D-4, D-5, D-9 and D-11, and added D-14 and D-15 (their "was OQ" numbers are first-draft numbers). Revision 3 changed D-4 and added D-16 to D-19 (D-16 to D-18 were the open questions OQ-2 to OQ-4 of revision 2). Revision 4 changed D-4 and D-16 and added D-21 to D-23 (D-22 and D-23 were the open questions OQ-3 and OQ-4 of the rev 4 draft). Revision 5 added D-24 to D-29, all decided by the owner.
 
 ### 20.1 Decisions
 
@@ -1152,6 +1215,12 @@ The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13
 | D-21 (new, rev 4) | The embedding model is Perplexity `pplx-embed-v1-0.6b` through the hosted Perplexity API at its native 1024 dimensions, replacing OpenAI `text-embedding-3-small`. `embedding_version` stays `v1-d1024` (nothing has been embedded yet; the model name is stored separately). Chat stays Gemini only. There is no fallback embedding model (INV-12). | The owner reopened the embedding choice; nothing has been embedded, so switching now costs no re-embedding. |
 | D-22 (was OQ-3, rev 4) | The Perplexity key variable is `PERPLEXITY_API_KEY`. `AiPlatformConfig` reads it as `SecretStr`, and the adapter passes every provider key (Perplexity and Gemini) to LiteLLM explicitly through its `api_key` argument. `ai_platform` never relies on LiteLLM detecting provider keys from the environment, and the LiteLLM-documented name `PERPLEXITYAI_API_KEY` is not read. | One name, no dependency on LiteLLM's environment lookup, and no accidental pick-up of an unrelated provider key. |
 | D-23 (was OQ-4, rev 4) | A third embedding limit, `EMBED_MAX_REQUEST_UNITS` (env `AI_EMBED_MAX_REQUEST_UNITS`, default to be filled at implementation from the official Perplexity embeddings API reference, with source URL and date), is the maximum total estimated input units of one provider request. `EmbeddingService` rejects a batch whose estimated total exceeds it with `ValidationFailed` (`ai_input_too_large`) before any request row, reservation or provider call, and never splits a batch. Splitting is the `rag` module's responsibility. `EmbeddingService` exposes a read-only `limits` attribute (`max_text_units`, `max_batch`, `max_request_units`) that `rag` reads. | The provider limits the total input of one request, so the rejection must happen before routing and leave no row, and one component (`rag`) owns batch sizing. |
+| D-24 (new, rev 5) | The reservation amount of a call equals the selected candidate's Router-produced `estimated_cost_micro_usd`. That single figure is the only authoritative value for the cost-ceiling check, the budget check and the reservation. The orchestrator never recalculates a different amount, and the atomic reservation still validates it against the live budget state (12.2). | One figure cannot make the Router and the reservation disagree. |
+| D-25 (new, rev 5) | The Router does not rank or filter by `supports_json_schema`. The provider adapter sends a JSON-schema `response_format` when the selected model supports it and the provider's JSON mode otherwise. Strict application-level validation is mandatory in both cases (11). | Support for provider-side schemas is an adapter detail, and validation is the only gate anyway. |
+| D-26 (new, rev 5) | Each task has a default `max_output_units` (section 9). The caller resolves one value, `min(request value, task default, model maximum)`, and a request can only lower the default. The Router clamps it per candidate model, the adapter sends exactly the effective value, and the estimate and the reservation use it. Values count output units including reasoning units billed as output (OQ-3). | A bounded output bounds the worst-case cost, and one value makes the context check, the estimate and the provider request agree. |
+| D-27 (new, rev 5) | No real user data is sent to any provider (Gemini free tier, Perplexity or any other) until the owner has recorded completion of the privacy review (provider terms and any data processing addendum). Until then every call, including live tests, uses synthetic text only (20.3). | Provider terms on submitted content are unverified, and a leak cannot be undone. |
+| D-28 (new, rev 5) | Task quality classes are unchanged. A task of class `high` can run only on `high`-tier models. A task of class `standard` runs on the best-ranked eligible model and may fall back to the other eligible model of the same billing mode (10.2, OQ-5). Descriptions of what a model is "for" are not routing rules. | Routing follows the task's quality class and cost, not marketing descriptions. |
+| D-29 (new, rev 5) | Batch splitting, chunking of long texts, rate-limit retry with exponential backoff and jitter, concurrency limits and never silently dropping an input for embeddings belong to `rag`. D-23 stays: `EmbeddingService` only validates (5.3, 5.7). | One owner for batch sizing and retry keeps `ai_platform` free of document knowledge. |
 
 Review fixes F-1 to F-6 are applied in sections 4, 5, 7, 11, 12, 16 and 17, and the fixed decisions listed in F-6 are unchanged. Revision 2 also applies three review items: lease fencing (E-1, 8.1, INV-28), the budget reconciliation job (E-2, 8.4, INV-30) and the error classification table (E-3, 10.3). Revision 3 adds precision fixes for abandoned-record accounting (8.2, 12.1) and the identifier-type boundary note (5.1).
 
@@ -1170,12 +1239,16 @@ There is no scheduler prerequisite (D-2).
 - Before production, database backup and WAL / point-in-time-recovery retention are reviewed against the privacy policy (8.3).
 - Before any real user content is sent to the Gemini free tier, the owner verifies Google's current terms on use of submitted content.
 - Before any real user content is sent to Perplexity for embedding, the owner verifies Perplexity's current terms and any data processing addendum (OQ-2). This spec makes no claim about retention or training.
+- **Hard rule (D-27).** No real user data may be sent to any provider (Gemini free tier, Perplexity or any other) until the owner has recorded completion of the privacy review (provider terms and any data processing addendum). Until then every call, including live tests, uses synthetic text only.
+- Catalog prices and model availability are re-verified at least monthly, and before any announced price change or model deprecation. The owner supplies the new values.
+- Any Neon test run is a separate, explicitly gated task, with a Neon-specific marker that exists only on the dedicated test branch. No Neon work is part of this spec revision.
 
 ### 20.4 Implementation inputs
 
 These are not spec blockers. They are inputs the owner supplies at implementation time.
 
 - **Gemini models per quality tier.** The owner names the Gemini models for each tier at implementation time against Google's current official documentation (model list, context window, price, free-tier terms and quotas). The catalog records the source URL and the date for each. No prices or limits are written from memory, in this spec or in the catalog.
+- **Owner-selected Gemini chat models (rev 5, unverified).** The owner selected `gemini-3.5-flash-lite` as the standard-tier model and `gemini-3.8-flash` as the high-tier model. The basic tier stays empty. The LiteLLM identifiers are `gemini/gemini-3.5-flash-lite` and `gemini/gemini-3.8-flash`. This is owner-supplied catalog data and is **not verified**. The catalog step verifies it against the official Google and LiteLLM documentation: the exact id, general availability or preview, deprecation date, context window, maximum output, structured-output support, prices (including any large-prompt tier), whether thinking units are billed as output, free-tier availability and data terms, rate limits, and scheduled price changes. No model detail, price or limit is written in this spec. Previous-generation models and preview models are not default production models.
 - **Perplexity embedding inputs.** The owner supplies, from the official Perplexity and LiteLLM documentation: the exact API model identifier, the per-text, per-batch and total-request limits (`EMBED_MAX_TEXT_UNITS`, `EMBED_MAX_BATCH`, `EMBED_MAX_REQUEST_UNITS`, D-23), the rate limits, the price per million units, the source URL and the date. The catalog records them, and no price or numeric limit is written in this spec. There is no fallback embedding model and no fallback price (INV-12).
 - **Verified facts (format and identifiers only), verified on 2026-11-09** against `https://docs.perplexity.ai/docs/embeddings/quickstart`, `https://docs.perplexity.ai/docs/embeddings/standard-embeddings`, `https://docs.perplexity.ai/api-reference/embeddings-post`, `https://docs.litellm.ai/docs/providers/perplexity_embedding` and `https://huggingface.co/perplexity-ai/pplx-embed-v1-0.6b`:
   - The API model identifier is `pplx-embed-v1-0.6b` (the endpoint is `POST /v1/embeddings`). Its native output is 1024 dimensions.
