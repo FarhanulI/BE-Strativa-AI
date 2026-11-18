@@ -20,7 +20,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.ai_platform.catalog import CatalogModel, ModelCatalog
-from app.ai_platform.enums import AiCapability, AiModality, LatencyClass, QualityClass
+from app.ai_platform.enums import (
+    AiCapability,
+    AiModality,
+    AiTaskName,
+    LatencyClass,
+    QualityClass,
+)
 from app.ai_platform.errors import (
     AiBudgetExceeded,
     AiInputTooLarge,
@@ -131,6 +137,8 @@ class RoutingInput(BaseModel):
             raise ValueError("max_output_units must be None for an embedding task")
         if not is_embedding and self.max_output_units is None:
             raise ValueError("max_output_units is required for a generation task")
+        if self.pinned is not None and self.task.name is not AiTaskName.EMBED_TEXT:
+            raise ValueError("a pinned model is allowed only for the embedding task")
         return self
 
 
@@ -156,6 +164,9 @@ class RoutedModel:
     billing_mode: BillingMode
     estimated_cost_micro_usd: int
     route_rank: int
+    # The resolved max_output_units clamped to this model's maximum: the one value used for the
+    # context-fit check, the cost estimate and the reservation (D-31). None for an embedding task.
+    effective_max_output_units: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,6 +363,9 @@ def route(routing_input: RoutingInput) -> RoutingResult:
             billing_mode=billing[(entry.provider, entry.model)],
             estimated_cost_micro_usd=cost_of(entry),
             route_rank=position,
+            effective_max_output_units=(
+                None if routing_input.max_output_units is None else output_units(entry)
+            ),
         )
         for position, entry in enumerate(selected, start=1)
     )

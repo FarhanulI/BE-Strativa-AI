@@ -505,8 +505,8 @@ def test_snapshot_json_is_canonical() -> None:
 def test_candidates_carry_rank_cost_and_billing_mode() -> None:
     result = run(_priced("a", 100, 10_000), _priced("b", 100, 20_000))
     assert result.candidates == (
-        RoutedModel(P1, "a", "free_tier", 11, 1),
-        RoutedModel(P1, "b", "free_tier", 22, 2),
+        RoutedModel(P1, "a", "free_tier", 11, 1, 500),
+        RoutedModel(P1, "b", "free_tier", 22, 2, 500),
     )
     assert result.routing_version == "rv-test-1"
 
@@ -915,7 +915,7 @@ def test_results_and_input_are_frozen() -> None:
 def test_a_result_needs_a_failure_exactly_when_it_has_no_candidates() -> None:
     with pytest.raises(ValueError):
         RoutingResult(candidates=(), snapshot=(), failure=None, routing_version="v")
-    candidate = RoutedModel(P1, "a", "free_tier", 1, 1)
+    candidate = RoutedModel(P1, "a", "free_tier", 1, 1, 500)
     with pytest.raises(ValueError):
         RoutingResult(
             candidates=(candidate,),
@@ -987,7 +987,9 @@ def test_missing_fields_are_rejected() -> None:
 
 def test_a_valid_input_with_all_optional_values_is_accepted() -> None:
     routing_input = build_input(
-        catalog_of(entry("a")),
+        catalog_of(embed("a")),
+        task=AiTaskRegistry().get(AiTaskName.EMBED_TEXT),
+        max_output_units=None,
         quality_floor=QualityClass.HIGH,
         pinned=(P1, "a"),
     )
