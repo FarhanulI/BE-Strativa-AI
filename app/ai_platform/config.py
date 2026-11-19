@@ -8,6 +8,7 @@ setting, never its value.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from decimal import Decimal, InvalidOperation, localcontext
 from typing import Any, Literal
 
@@ -31,6 +32,13 @@ _MAX_MICRO_USD = 2**63 - 1  # the budget columns are bigint
 _BUDGET_DECIMAL_PLACES = Decimal("0.000001")
 
 GeminiBillingMode = Literal["free_tier", "paid"]
+BillingModeName = Literal["free_tier", "paid"]
+
+# Provider identifiers are allowed in this module only (INV-3, AC-2). They match the catalog's
+# ``provider`` field.
+_CHAT_PROVIDER = "gemini"
+_EMBEDDING_PROVIDER = "perplexity"
+_UNKNOWN_PROVIDER = "unknown AI provider"
 
 EMBEDDING_LIMITS_NOT_CONFIGURED = "AI embedding limits are not configured"
 
@@ -247,6 +255,35 @@ class AiPlatformConfig(BaseSettings):
     @property
     def system_limit_micro_usd(self) -> int:
         return int(self.system_monthly_budget_usd * MICRO_USD_PER_USD)
+
+    def api_key_for(self, provider: str) -> SecretStr | None:
+        """The configured credential of a provider, or ``None`` (absent, blank or unknown id).
+
+        Never echoes the provider id or any key value; the returned ``SecretStr`` masks itself.
+        """
+        if provider == _CHAT_PROVIDER:
+            return self.gemini_api_key
+        if provider == _EMBEDDING_PROVIDER:
+            return self.perplexity_api_key
+        return None
+
+    def is_provider_configured(self, provider: str) -> bool:
+        return self.api_key_for(provider) is not None
+
+    def billing_mode_for(self, provider: str) -> BillingModeName:
+        """The billing mode of a provider credential (D-19): configured for the chat provider,
+        always ``paid`` for the embedding provider. An unknown provider raises ``ValueError``."""
+        if provider == _CHAT_PROVIDER:
+            return self.gemini_billing_mode
+        if provider == _EMBEDDING_PROVIDER:
+            return "paid"
+        raise ValueError(_UNKNOWN_PROVIDER)
+
+    def provider_configured_map(self, providers: Iterable[str]) -> dict[str, bool]:
+        return {provider: self.is_provider_configured(provider) for provider in providers}
+
+    def billing_mode_map(self, providers: Iterable[str]) -> dict[str, BillingModeName]:
+        return {provider: self.billing_mode_for(provider) for provider in providers}
 
     def embedding_limits(self) -> EmbeddingLimits:
         """The embedding limits, or ``ConfigurationError`` if any of the three is unset."""
