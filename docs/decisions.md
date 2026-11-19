@@ -20,7 +20,7 @@ This is the central index and cross-module decision record. It is **not** a repl
 
 ## 2. SDD migration decisions (new)
 
-SDD-D-1 to SDD-D-4 were made by the owner on **2026-11-19** and are recorded as supplied for the SDD migration. SDD-D-5 and SDD-D-6 are the accepted migration decisions of the finalization milestone, recorded the same day.
+SDD-D-1 to SDD-D-4 were made by the owner on **2026-11-19** and are recorded as supplied for the SDD migration. SDD-D-5 and SDD-D-6 are the accepted migration decisions of the finalization milestone, recorded the same day. SDD-D-7 resumes product development.
 
 ### SDD-D-1: Phase 1 is owner-declared closed
 
@@ -89,6 +89,19 @@ SDD-D-1 to SDD-D-4 were made by the owner on **2026-11-19** and are recorded as 
   - Substantial implementation requires a `Ready` task that names requirement IDs, scope, non-goals, required tests and verification.
   - Task IDs are never used as requirement IDs.
   - Blocked work stays visible and is not marked complete.
+
+### SDD-D-7: Product development resumes under SDD
+
+- **Date:** 2026-11-19
+- **Status:** Accepted (owner decision)
+- **Decision:** The owner accepts the completed SDD governance foundation and authorizes resumption of product development under the SDD workflow ([sdd.md](sdd.md)). This supersedes the development pause in SDD-D-3. SDD-D-3 is historical and is not modified.
+- **Rationale:** The SDD foundation (decisions, traceability matrix, task workflow) is complete and accepted, so the migration pause no longer applies.
+- **Consequences:**
+  - Feature work may proceed only through an owner-approved `Ready` task that names requirement IDs (sdd.md; rules 11 to 17).
+  - Phase 1 remains owner-declared closed, not technically verified (SDD-D-1).
+  - Workspace Neon concurrency verification stays mandatory and needs separate explicit authorization (SDD-D-2). This decision authorizes no Neon operation.
+  - Existing architecture, module boundaries, phase sequencing and security rules remain authoritative.
+  - Existing verification gaps stay visible. No requirement is `Verified` without dated execution evidence.
 
 ## 3. Index of existing AI Platform decisions (D-1 to D-35)
 
