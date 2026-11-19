@@ -452,6 +452,7 @@ def test_package_root_exports() -> None:
             "AiCallContext", "AiBudgetStatus", "AiUsageReport", "AiUsageSummary",
             "AiBudgetService", "AiUsageService",
             "FakeAiProvider", "ScriptedResponse",
+            "AiTaskResult", "AiRequestStatus",
         ]
     )  # fmt: skip
     assert not hasattr(ai_platform, "AiRequest")

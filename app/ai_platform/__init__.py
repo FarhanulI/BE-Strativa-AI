@@ -40,6 +40,7 @@ from app.ai_platform.requests import (
     TextPart,
     VideoPart,
 )
+from app.ai_platform.results import AiRequestStatus, AiTaskResult
 from app.ai_platform.schemas import OutputSchemaRegistry
 from app.ai_platform.tasks import AiTaskDefinition, AiTaskRegistry
 from app.ai_platform.usage_service import AiUsageService
@@ -63,11 +64,13 @@ __all__ = [
     "AiPlatformConfig",
     "AiProviderNotConfigured",
     "AiProviderUnavailable",
+    "AiRequestStatus",
     "AiTaskDefinition",
     "AiTaskName",
     "AiTaskNotReady",
     "AiTaskRegistry",
     "AiTaskRequest",
+    "AiTaskResult",
     "AiUsageReport",
     "AiUsageService",
     "AiUsageSummary",
