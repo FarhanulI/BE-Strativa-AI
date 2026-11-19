@@ -365,3 +365,65 @@ def test_public_methods_take_no_free_text_parameters() -> None:
         assert not any(
             word in name for word in ("prompt", "completion", "text", "content", "message", "token")
         ), name
+
+
+# --- refuse_for_call (D-33) ---
+
+
+@pytest.mark.parametrize(
+    ("scope", "workspace_id", "task"),
+    [
+        ("global", None, "T"),
+        ("workspace", None, "T"),
+        ("system", WORKSPACE_ID, "T"),
+        ("workspace", WORKSPACE_ID, ""),
+        ("workspace", WORKSPACE_ID, None),
+    ],
+)
+async def test_refuse_for_call_validates_before_any_transaction(
+    monkeypatch: pytest.MonkeyPatch, scope: Any, workspace_id: Any, task: Any
+) -> None:
+    h = _Harness(monkeypatch, reserve=True, refusal_new=True)
+    with pytest.raises(ValueError):
+        await h.coordinator.refuse_for_call(scope, workspace_id, task)
+    assert h.factory.opened == 0 and h.log == []
+
+
+async def test_refuse_for_call_first_refusal_publishes_and_returns_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    h = _Harness(monkeypatch, reserve=True, refusal_new=True)
+    assert await h.coordinator.refuse_for_call("workspace", WORKSPACE_ID, "T") is None
+    assert h.log == [
+        "begin", "ensure", "record_refusal", "get_row", "publish", "audit", "commit", "close",
+    ]  # fmt: skip
+    assert len(h.published) == 1 and len(h.audits) == 1
+    assert "reserve" not in h.log and "insert_usage" not in h.log
+
+
+async def test_refuse_for_call_repeat_publishes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    h = _Harness(monkeypatch, reserve=True, refusal_new=False)
+    await h.coordinator.refuse_for_call("system", None, "EMBED_TEXT")
+    assert h.log == ["begin", "ensure", "record_refusal", "commit", "close"]
+    assert h.published == [] and h.audits == []
+
+
+async def test_refuse_for_call_rolls_back_when_publishing_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    h = _Harness(monkeypatch, reserve=True, refusal_new=True)
+    h.publish_error = RuntimeError("outbox down")
+    with pytest.raises(RuntimeError):
+        await h.coordinator.refuse_for_call("workspace", WORKSPACE_ID, "T")
+    assert "rollback" in h.log and "commit" not in h.log
+
+
+async def test_refuse_for_call_logs_ids_and_codes_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    from structlog.testing import capture_logs
+
+    h = _Harness(monkeypatch, reserve=True, refusal_new=False)
+    with capture_logs() as logs:
+        await h.coordinator.refuse_for_call("workspace", WORKSPACE_ID, "GENERATE_HOOK_VARIATIONS")
+    (entry,) = [e for e in logs if e["event"] == "ai_budget_refused"]
+    assert set(entry) == {"event", "log_level", "scope", "task", "period"}
+    assert entry["period"] == PERIOD.isoformat()

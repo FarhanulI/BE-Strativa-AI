@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -49,6 +49,10 @@ AUDIT_ACTOR_TYPE = "system"
 def _log() -> Any:
     """A fresh bound logger per use, so log capture and later logging configuration both apply."""
     return structlog.get_logger("app.ai_platform.budget")
+
+
+def _log_refusal(scope: str, task: str, period: date) -> None:
+    _log().info("ai_budget_refused", scope=scope, task=task, period=period.isoformat())
 
 
 @dataclass(frozen=True)
@@ -187,13 +191,36 @@ class BudgetCoordinator:
                 )
                 return ReservationResult(record_id, budget_row_id, limit)
 
-            if await repo.record_refusal(session, budget_row_id, limit, now):
-                await self._publish_budget_event(session, budget_row_id, now, exhausted=True)
+            await self._record_refusal(session, budget_row_id, limit, now)
         # The transaction above has committed. Only now does the caller learn of the refusal.
-        _log().info(
-            "ai_budget_refused", scope=scope, task=params.task, period=period.isoformat()
-        )
+        _log_refusal(scope, params.task, period)
         raise AiBudgetExceeded()
+
+    async def refuse_for_call(
+        self, scope: repo.Scope, workspace_id: UUID | None, task: str
+    ) -> None:
+        """Record a budget refusal that was detected without a reservation attempt (D-33).
+
+        Used when the Router's snapshot step 7 removes the last candidate. Runs the same refusal
+        transaction as the reservation path: ensure the budget row, store the current limit, set the
+        exhausted flag, and only when the flag was newly set publish ``ai.budget_exhausted`` with
+        the actual amounts and append the audit record. Commits, logs ``ai_budget_refused`` and
+        returns. It does NOT raise: the caller raises ``AiBudgetExceeded``. It writes no usage
+        record and reserves nothing.
+        """
+        _check_scope(scope, workspace_id)
+        if not isinstance(task, str) or not task:
+            raise ValueError("task must be a non-empty string")
+        limit = self.limit_for_scope(scope)
+        now = self._clock.now()
+        period = repo.period_start_for(now)
+
+        async with self._sessions() as session, session.begin():
+            budget_row_id = await repo.ensure_budget_row(
+                session, scope, workspace_id, period, limit, now
+            )
+            await self._record_refusal(session, budget_row_id, limit, now)
+        _log_refusal(scope, task, period)
 
     # ----------------------------------------------------------------------------------------
     # Settlement
@@ -257,6 +284,13 @@ class BudgetCoordinator:
     # ----------------------------------------------------------------------------------------
     # Event and audit (always inside the caller's open transaction)
     # ----------------------------------------------------------------------------------------
+
+    async def _record_refusal(
+        self, session: AsyncSession, budget_row_id: UUID, limit: int, now: datetime
+    ) -> None:
+        """The refusal statements: limit, flag, and on the FIRST refusal event plus audit."""
+        if await repo.record_refusal(session, budget_row_id, limit, now):
+            await self._publish_budget_event(session, budget_row_id, now, exhausted=True)
 
     async def _publish_budget_event(
         self,
