@@ -2,9 +2,9 @@
 
 - **Module:** ai_platform
 - **Phase:** 2 — AI & Knowledge Platform
-- **Specification status:** Approved at revision 4 only. Revisions 5, 6 and 7 are present in this text; their approval is not established by available evidence (see below).
+- **Specification status:** Approved at revision 4 (date not stated) and at revisions 5, 6 and 7 (owner decision, this conversation, 2026-11-19; see below).
 - **Revision:** Content is at revision 7.
-- **Approval status:** Revision 4: owner approval explicitly recorded in the Status paragraph below (approval date: Not stated). Revisions 5 to 7: later changes are present; no approval record is available, so none is claimed. Pending owner confirmation (task T-006 in [docs/tasks/](../../tasks/README.md)).
+- **Approval status:** Revision 4: owner approval explicitly recorded in the Status paragraph below (approval date: Not stated). Revisions 5 to 7 (D-24 to D-35, AC-59 and the related text): approved by the owner on 2026-11-19, recorded as "owner decision, this conversation" (task T-006 in [docs/tasks/](../../tasks/README.md)). This records approval only. No requirement text was changed, no earlier approval evidence exists for these revisions, and D-32 and D-20 remain unresolved (T-004, T-005).
 - **Identifier scheme:** `INV-n`, `AC-n`, `D-n` and `OQ-n` are unprefixed and are preserved exactly (SDD-D-5). D-32 is referenced by code and tests but has no entry in section 20.1; D-20 has no revision stated. Both are unresolved historical discrepancies recorded in [decisions.md](../../decisions.md), not fixed here.
 - **Metadata added by the SDD migration.** The Status paragraph below is the original text and is unchanged.
 
