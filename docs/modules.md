@@ -5,6 +5,7 @@ Rules:
 - Modules communicate only through public service interfaces or domain events (transactional outbox). Never import another module's internals or query its tables.
 - Every module spec must cite the architecture sections it implements and include: purpose, owned entities, DB schema and indexes, public interface, OpenAPI endpoints, events in/out, jobs, AI tasks used, UI slice, authorization rules, invariants, acceptance criteria, non-goals.
 - Specs are per feature at `docs/specs/<feature>/spec.md` (Backend, Frontend, Public interfaces). Phases define build order only.
+- Process, requirement IDs and task workflow: [docs/sdd.md](sdd.md). The module map documents 37 modules in 10 phases (0 to 9).
 
 ### Phase 0 — Foundation
 - core: shared kernel (base entities, IDs, errors, config, clock, pagination, module-boundary rules); [spec](specs/core/spec.md)
@@ -14,7 +15,7 @@ Rules:
 - db_migrations: Neon conventions, SQLAlchemy 2 async, Alembic, pgvector setup, indexing standards; [spec](specs/db-migrations/spec.md)
 - api_contract: OpenAPI as the contract, generated TypeScript client; [spec](specs/api-contract/spec.md)
 - web_foundation: Next.js app shell, workspace switcher, design system, API client wrapper, streaming/job-status utilities
-	- Its spec is `docs/specs/web-foundation/spec.md` and will be added by the FE task.
+	- Its spec is `docs/specs/web-foundation/spec.md` and will be added by the FE task. The spec is not in this repository; the missing-spec dependency is tracked as [T-007](tasks/T-007-web-foundation-spec-dependency.md).
 
 ### Phase 1 — Core & Tenancy
 - auth: registration, login, tokens, sessions; [spec](specs/auth-onboarding/spec.md)

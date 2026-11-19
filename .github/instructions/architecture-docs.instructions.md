@@ -14,3 +14,4 @@ applyTo: "docs/**/*.md"
 - Keep human edits/version history, downstream invalidation, content lineage, and the distinction between human preference and audience performance visible wherever the relevant workflows are specified.
 - Prefer concise links to canonical sections over copying large passages. Use consistent names for modules, entities, events, states, and AI tasks; mark unresolved choices as open decisions rather than presenting assumptions as settled facts.
 - Include acceptance criteria that can be verified through tests or a demonstrated workflow, not vague outcomes.
+- Requirement IDs follow [docs/sdd.md](../../docs/sdd.md) section 3: never reuse or renumber an ID, and give IDs only to normative, verifiable statements. Keep [docs/traceability.md](../../docs/traceability.md) in step with any requirement change.

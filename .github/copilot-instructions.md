@@ -2,6 +2,7 @@
 
 ## Source of truth
 
+- The SDD process, authority hierarchy and task lifecycle are in [docs/sdd.md](../docs/sdd.md). Tasks are in [docs/tasks/](../docs/tasks/README.md).
 - Treat [the product architecture](../docs/product-architecture.md) as canonical. Treat [the module map](../docs/modules.md) as the implementation phase order and module inventory.
 - When instructions conflict, follow the product architecture and call out the conflict rather than silently introducing a new architectural decision.
 - This project is a modular monolith: Next.js, FastAPI, Neon PostgreSQL with pgvector/tsvector, and Redis. Do not introduce microservices, Kafka, or other infrastructure without an explicit request.
@@ -60,3 +61,15 @@ Introduced by the SDD migration (see [decisions.md](../docs/decisions.md), SDD-D
 8. Task lists and verification reports are subject to milestone-level owner review.
 9. The security, environment, database and repository safety rules above remain authoritative, including the rule that Neon runs only in an explicitly authorised, separate task.
 10. Decisions made for SDD are recorded in [docs/decisions.md](../docs/decisions.md) under the `SDD-D-n` namespace. Existing `D-n` decisions are never renumbered or redefined there.
+
+### Agent workflow rules (SDD)
+
+Defined in [docs/sdd.md](../docs/sdd.md). They add to the rules above and never relax a safety rule.
+
+11. Before implementing, read the module map entry and the module spec, identify the applicable requirement IDs (`<MODULE>-INV-n`, `<MODULE>-AC-n`; AI Platform `INV-n`, `AC-n`), and check [docs/decisions.md](../docs/decisions.md) and the architecture boundaries.
+12. Substantial implementation needs a `Ready` task in [docs/tasks/](../docs/tasks/README.md) that names the requirement IDs. Create or update the task first. Work only inside the task scope; if the scope must change, stop and update the task.
+13. Add or update tests for each applicable acceptance criterion, and update [docs/traceability.md](../docs/traceability.md) after implementation. Cite the task and requirement IDs in commit messages.
+14. Record actual verification evidence (date, command or skill, environment, counts). Never claim verification without execution evidence. Local PostgreSQL never verifies a requirement that names Neon.
+15. Never reuse or renumber a requirement ID. Never silently change an approved spec; write a change proposal (rule 4). Record new decisions as `SDD-D-n` and never override an existing decision.
+16. The database suite runs only through `/run-db-suite`. Do not create commands or scripts that bypass the database, Neon, secret or environment rules.
+17. Stop and report when owner approval or external authorization is required (Neon, spec approval, a new decision, scope change, missing spec). A `Blocked` task stays `Blocked`; do not work around it.

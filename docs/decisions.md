@@ -10,15 +10,17 @@ This is the central index and cross-module decision record. It is **not** a repl
 
 | Namespace | Meaning | Defined in |
 | --- | --- | --- |
-| `D-n` | Historical AI Platform decisions D-1 to D-35 | [AI Platform spec, section 20.1](specs/ai-platform/spec.md) (authoritative text) |
+| `D-n` | Historical AI Platform decisions D-1 to D-35 (D-32 is not defined; section 6) | [AI Platform spec, section 20.1](specs/ai-platform/spec.md) (authoritative text) |
 | `OQ-n` | Historical AI Platform open questions | [AI Platform spec, section 19](specs/ai-platform/spec.md) |
 | `SDD-D-n` | New decisions made for the Spec-Driven Development (SDD) migration | This document, section 2 |
+| `<MODULE>-INV-n`, `<MODULE>-AC-n` | Requirement IDs of the nine non-AI-Platform specs (SDD-D-5). Requirements, not decisions. | The module spec |
+| `T-nnn` | Task IDs (SDD-D-6). Tasks, not requirements or decisions. | [docs/tasks/](tasks/README.md) |
 
 `D-n` identifiers are never redefined here. New decisions always take an `SDD-D-n` ID, or a module-specific namespace that is introduced by that module's own spec.
 
 ## 2. SDD migration decisions (new)
 
-All four decisions were made by the owner on **2026-11-19** and are recorded as supplied for the SDD migration.
+SDD-D-1 to SDD-D-4 were made by the owner on **2026-11-19** and are recorded as supplied for the SDD migration. SDD-D-5 and SDD-D-6 are the accepted migration decisions of the finalization milestone, recorded the same day.
 
 ### SDD-D-1: Phase 1 is owner-declared closed
 
@@ -66,6 +68,28 @@ All four decisions were made by the owner on **2026-11-19** and are recorded as 
   - Work stops for owner review at the end of each milestone, and the next milestone does not start without owner approval.
   - The existing requirement to commit and push after each logical change is unchanged (see Standing rules in [.github/copilot-instructions.md](../.github/copilot-instructions.md)).
 
+### SDD-D-5: Module-prefixed requirement identifiers
+
+- **Date:** 2026-11-19
+- **Status:** Accepted (owner decision, finalization milestone)
+- **Decision:** Requirements in the nine non-AI-Platform specs use `<MODULE>-INV-<n>` and `<MODULE>-AC-<n>` with the codes CORE, OUT, JOB, OBS, DBM, API, AUTH, WS and PROF. Existing AI Platform `INV-n`, `AC-n`, `D-n` and `OQ-n` identifiers are preserved exactly and are not prefixed. SDD governance decisions stay `SDD-D-n`.
+- **Rationale:** Unprefixed numbers collide across modules. Renumbering the AI Platform would break references in its spec, code and tests.
+- **Consequences:**
+  - IDs are stable and are never reused or renumbered. Only normative, verifiable statements receive IDs; one top-level bullet of a spec's Invariants or Acceptance criteria section is one requirement, so inseparable checks are not split.
+  - Frontend design material (for example Auth cookie/BFF and Profile concurrency screens) is not converted into IDs until its normative scope is established (section 6).
+  - Assignment was applied in order of appearance in each spec at the time of the migration. The requirement text was not changed.
+
+### SDD-D-6: Task workflow
+
+- **Date:** 2026-11-19
+- **Status:** Accepted (owner decision, finalization milestone)
+- **Decision:** Work is organised as `T-nnn` task files in [docs/tasks/](tasks/README.md) with the lifecycle Proposed, Ready, In Progress, Implemented, Verified, Accepted, plus Blocked. The process is defined in [sdd.md](sdd.md).
+- **Rationale:** Requirements, tasks and evidence need separate identifiers so that a task can close without changing a requirement's verification status.
+- **Consequences:**
+  - Substantial implementation requires a `Ready` task that names requirement IDs, scope, non-goals, required tests and verification.
+  - Task IDs are never used as requirement IDs.
+  - Blocked work stays visible and is not marked complete.
+
 ## 3. Index of existing AI Platform decisions (D-1 to D-35)
 
 Source: [AI Platform spec, section 20.1](specs/ai-platform/spec.md). The spec states that D-1 came from the review, D-2 to D-13 were first-draft Open Questions, revision 2 changed D-2, D-4, D-5, D-9 and D-11 and added D-14 and D-15, revision 3 changed D-4 and added D-16 to D-19, revision 4 changed D-4 and D-16 and added D-21 to D-23, revision 5 added D-24 to D-29, revision 6 added D-30 and D-31, and revision 7 added D-33 to D-35. D-20 is marked "new" with no revision stated in the spec's summary.
@@ -93,7 +117,7 @@ The "Topic" column is a short index label only and is not normative.
 | D-17 | `ON DELETE CASCADE` on `ai_*` foreign keys for now | was OQ-3 rev 2 |
 | D-18 | Notification flags and budget `state` computation | was OQ-4 rev 2 |
 | D-19 | Billing mode belongs to the provider credential | new, rev 3 |
-| D-20 | Quality, latency and cost classes of `EMBED_TEXT` | new (revision not stated) |
+| D-20 | Quality, latency and cost classes of `EMBED_TEXT` | new (revision not stated; unresolved, section 6) |
 | D-21 | Perplexity embedding model replaces the earlier choice | new, rev 4 |
 | D-22 | Perplexity key variable and explicit key passing | was OQ-3 rev 4 |
 | D-23 | Total embedding request limit; splitting belongs to `rag` | was OQ-4 rev 4 |
@@ -145,9 +169,23 @@ These are preserved as unresolved. This register does not decide them.
 | OQ-2 Perplexity terms and privacy for submitted content | same | Open; D-27 gates real user data meanwhile |
 | OQ-3 Reasoning units and the output cap | same | Open; to be decided in the catalog step |
 | Operational prerequisites and unverified implementation inputs | [AI Platform spec, sections 20.3 and 20.4](specs/ai-platform/spec.md) | As written in the spec; the owner-selected model identifiers are marked unverified there |
-| Workspace Neon TEST-branch concurrency criterion | [Workspace spec, Acceptance criteria](specs/workspace/spec.md) | Required and not yet evidenced; see SDD-D-2 |
+| Workspace Neon TEST-branch concurrency criterion (WS-AC-3) | [Workspace spec, Acceptance criteria](specs/workspace/spec.md) | Required and not yet evidenced; see SDD-D-2. Blocked on separate owner authorization; task T-001 |
 
-## 6. Observations for owner review
+## 6. Unresolved historical discrepancies and owner questions
 
-- **D-32 is absent.** The AI Platform decision table goes from D-31 to D-33. The spec's revision summary says revision 7 records D-33 to D-35 and says no earlier numbering changed. This register does not assign, fill or explain D-32. The owner should confirm whether it is an intentional gap.
-- The first draft of the AI Platform spec refers to "was OQ" numbers from earlier revisions, so "OQ-n" in a revision note can mean a different question than the current OQ-n. Use section 19 for current open questions.
+Recorded as found. None is resolved here, none is guessed, and no code, test or spec reference was changed to hide it.
+
+| Item | Finding | Owner resolution task |
+| --- | --- | --- |
+| D-32 reference discrepancy | The AI Platform decision table goes from D-31 to D-33. D-32 is cited in code and tests (`app/ai_platform/failure_policy.py`, `tests/unit/ai_platform/test_failure_policy.py`) but never appears in the spec's decision register or in the history inspected in the Milestone 2 assessment. No D-32 decision is created, its meaning is not inferred, and D-33 onward are not renumbered. The existing references are preserved. | T-004 |
+| D-20 revision metadata | D-20 is present and its text is preserved. The spec's revision summary states no revision for it, so no revision number is assigned. | T-005 |
+| AI Platform approval history | The spec contains revision 7 content but its Status refers to owner approval of revision 4. Revision 4: approval recorded. Revisions 5 to 7: changes present, approval not established by available evidence. The spec header now states this without rewriting history. | T-006 |
+| Approval metadata of the other nine specs | Specification status, revision, approval status and approval date are `Not stated` or `Not recorded` in each spec. No value was invented. | T-009 |
+| Frontend normative scope | Onboarding stays frontend-derived state, not a backend module. The Auth cookie, BFF and wizard material and the Profile frontend concurrency material were not converted into acceptance criteria. Whether any of it is normative for the backend, or belongs to a frontend spec, is undecided. Note: the backend Profile invariant PROF-INV-4 on `If-Match` already covers the backend side. | T-010 |
+| web_foundation spec | `docs/specs/web-foundation/spec.md`, expected by the module map, is not in this repository. No substitute was written. It stays outside backend traceability until the frontend scope provides it. `../web` was not inspected. | T-007 |
+| Stray line in the Auth spec | Line 1 of `docs/specs/auth-onboarding/spec.md` is an orphan table row for `PATCH /me` above the title. It was left unchanged. | T-010 |
+| OQ numbering | A revision note's "was OQ-n" can name a different question than the current OQ-n. Use AI Platform section 19 for current open questions. | none |
+
+## 7. Edits to specifications during the migration
+
+SDD-D-3 paused spec edits unless a milestone authorized them. The finalization milestone authorized, and was limited to: adding requirement IDs and a metadata block to the nine non-AI-Platform specs, and adding a metadata block to the AI Platform spec. No requirement text, decision or existing identifier was changed.
