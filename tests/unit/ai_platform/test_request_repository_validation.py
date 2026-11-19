@@ -192,3 +192,15 @@ def test_module_never_commits_or_reads_a_clock() -> None:
 def test_statements_use_bound_parameters_only() -> None:
     for statement in (repo._INSERT_SYNC, repo._COMPLETE, repo._SELECT_SNAPSHOT):
         assert "%s" not in statement and "{" not in statement
+
+
+def test_no_token_in_the_new_modules_names() -> None:
+    import app.ai_platform.budget_coordinator as coordinator_module
+
+    for module in (repo, coordinator_module):
+        names = {n for n in vars(module) if not n.startswith("__")}
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if cls.__module__ == module.__name__:
+                names |= {n for n in vars(cls) if not n.startswith("__")}
+                names |= set(getattr(cls, "__dataclass_fields__", {}))
+        assert [n for n in names if "token" in n.lower()] == []
