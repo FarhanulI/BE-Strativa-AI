@@ -1,5 +1,12 @@
 # Events and Outbox Module Specification
 
+- **Module:** events_outbox
+- **Phase:** 0 — Foundation
+- **Specification status:** Not stated (pending owner confirmation)
+- **Revision:** Not stated
+- **Approval status:** Not recorded (pending owner confirmation)
+- **Requirement ID prefix:** `OUT` (`OUT-INV-n`, `OUT-AC-n`). Assigned by the SDD migration; see [traceability.md](../../traceability.md).
+
 ## Backend
 
 ### Purpose
@@ -48,16 +55,16 @@ No user authorization. Tenant authorization remains with the domain module. Payl
 
 ### Invariants
 
-- Event rows commit or roll back with the originating state change.
-- External delivery never occurs while holding the claim transaction open.
-- Crashes may produce duplicate delivery, never silent loss of a committed unexpired event.
-- Processed-event idempotency is scoped by consumer and event ID.
+- **OUT-INV-1.** Event rows commit or roll back with the originating state change.
+- **OUT-INV-2.** External delivery never occurs while holding the claim transaction open.
+- **OUT-INV-3.** Crashes may produce duplicate delivery, never silent loss of a committed unexpired event.
+- **OUT-INV-4.** Processed-event idempotency is scoped by consumer and event ID.
 
 ### Acceptance criteria
 
-- DB-free tests validate envelope versions and safe serialization.
-- DB tests prove caller rollback removes the event, concurrent claimers do not claim the same live lease, expired leases can be reclaimed, and duplicate processing is idempotent.
-- Relay publishes correlation metadata and retries with bounded backoff.
+- **OUT-AC-1.** DB-free tests validate envelope versions and safe serialization.
+- **OUT-AC-2.** DB tests prove caller rollback removes the event, concurrent claimers do not claim the same live lease, expired leases can be reclaimed, and duplicate processing is idempotent.
+- **OUT-AC-3.** Relay publishes correlation metadata and retries with bounded backoff.
 
 ### Non-goals
 

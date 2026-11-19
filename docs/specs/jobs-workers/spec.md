@@ -1,5 +1,12 @@
 # Jobs and Workers Module Specification
 
+- **Module:** jobs_workers
+- **Phase:** 0 — Foundation
+- **Specification status:** Not stated (pending owner confirmation)
+- **Revision:** Not stated
+- **Approval status:** Not recorded (pending owner confirmation)
+- **Requirement ID prefix:** `JOB` (`JOB-INV-n`, `JOB-AC-n`). Assigned by the SDD migration; see [traceability.md](../../traceability.md).
+
 ## Backend
 
 ### Purpose
@@ -49,16 +56,16 @@ No end-user authorization. Redis is a trusted service; restrict credentials/netw
 
 ### Invariants
 
-- Acknowledgement occurs only after handler success/committed effects.
-- Retries are bounded and idempotency is required for handlers with side effects.
-- Shutdown/restart does not discard pending or unacknowledged work.
-- Job errors and trace context are sanitized and correlated.
+- **JOB-INV-1.** Acknowledgement occurs only after handler success/committed effects.
+- **JOB-INV-2.** Retries are bounded and idempotency is required for handlers with side effects.
+- **JOB-INV-3.** Shutdown/restart does not discard pending or unacknowledged work.
+- **JOB-INV-4.** Job errors and trace context are sanitized and correlated.
 
 ### Acceptance criteria
 
-- Unit tests cover validation, retry classification/backoff, shutdown behavior, and DLQ routing.
-- Redis integration tests cover enqueue/claim/ack, redelivery after consumer failure, and DLQ after exhaustion.
-- Readiness reports Redis `not_configured` when optional configuration is absent and does not attempt a connection during OpenAPI generation.
+- **JOB-AC-1.** Unit tests cover validation, retry classification/backoff, shutdown behavior, and DLQ routing.
+- **JOB-AC-2.** Redis integration tests cover enqueue/claim/ack, redelivery after consumer failure, and DLQ after exhaustion.
+- **JOB-AC-3.** Readiness reports Redis `not_configured` when optional configuration is absent and does not attempt a connection during OpenAPI generation.
 
 ### Non-goals
 

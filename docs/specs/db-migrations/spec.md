@@ -1,5 +1,12 @@
 # Database Migrations Module Specification
 
+- **Module:** db_migrations
+- **Phase:** 0 — Foundation
+- **Specification status:** Not stated (pending owner confirmation)
+- **Revision:** Not stated
+- **Approval status:** Not recorded (pending owner confirmation)
+- **Requirement ID prefix:** `DBM` (`DBM-INV-n`, `DBM-AC-n`). Assigned by the SDD migration; see [traceability.md](../../traceability.md).
+
 ## Backend
 
 ### Purpose
@@ -47,17 +54,17 @@ No end-user authorization. Never substitute or infer a database branch; do not e
 
 ### Invariants
 
-- Runtime uses only `DATABASE_URL`; migrations use only `DATABASE_URL_DIRECT`.
-- No DB access occurs during import or OpenAPI generation.
-- Configured database URLs require the explicitly matching branch selector. Production migration requires an explicit flag.
-- Migrations are reversible; production is not run automatically.
+- **DBM-INV-1.** Runtime uses only `DATABASE_URL`; migrations use only `DATABASE_URL_DIRECT`.
+- **DBM-INV-2.** No DB access occurs during import or OpenAPI generation.
+- **DBM-INV-3.** Configured database URLs require the explicitly matching branch selector. Production migration requires an explicit flag.
+- **DBM-INV-4.** Migrations are reversible; production is not run automatically.
 
 ### Acceptance criteria
 
-- Unit tests cover URL rewriting/TLS/cache options and migration guard selectors without a database.
-- Migration enables both extensions, has no seed data, and passes upgrade/downgrade/upgrade plus `alembic check` on dev and test when credentials are available.
-- DB-free metadata test rejects an unclassified table.
-- DB fixture fails clearly unless APP_ENV=test and branch=test; applies migrations once and rolls back each test via SAVEPOINT.
+- **DBM-AC-1.** Unit tests cover URL rewriting/TLS/cache options and migration guard selectors without a database.
+- **DBM-AC-2.** Migration enables both extensions, has no seed data, and passes upgrade/downgrade/upgrade plus `alembic check` on dev and test when credentials are available.
+- **DBM-AC-3.** DB-free metadata test rejects an unclassified table.
+- **DBM-AC-4.** DB fixture fails clearly unless APP_ENV=test and branch=test; applies migrations once and rolls back each test via SAVEPOINT.
 
 ### Non-goals
 
