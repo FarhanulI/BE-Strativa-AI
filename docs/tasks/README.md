@@ -16,6 +16,7 @@ A task is a bounded, owner-approved unit of work. The process, lifecycle and rul
 | [T-008](T-008-ai-platform-remaining-verification.md) | Remaining AI Platform implementation and verification gaps | ai_platform / 2 | Proposed | T-004 and T-006 for governance; feature work waits for owner approval to resume (SDD-D-3) |
 | [T-009](T-009-nine-spec-approval-metadata.md) | Approval metadata for the nine non-AI-Platform specs | Phase 0 and 1 modules | Blocked | Owner confirmation |
 | [T-010](T-010-frontend-scope-questions.md) | Frontend normative scope and spec cleanup questions | auth, profile / 1 | Blocked | Owner decision; frontend scope |
+| [T-011](T-011-ai-platform-sync-run-path.md) | AI Platform synchronous `run` path (fake provider) | ai_platform / 2 | Proposed | Owner approval; SDD-D-7 accepted |
 
 No task exists for a module that has no specification.
 
