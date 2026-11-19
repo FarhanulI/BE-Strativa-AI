@@ -37,6 +37,7 @@ from app.ai_platform import (
     TextPart,
     VideoPart,
 )
+from app.ai_platform.tasks import resolve_max_output_units
 from app.core import ConfigurationError
 
 C, Q, L, K = AiCapability, QualityClass, LatencyClass, CostClass
@@ -56,6 +57,18 @@ SPEC_TABLE = {
     AiTaskName.EXTRACT_AUDIENCE_SIGNALS: (_GROUNDED, "AudienceSignalExtraction", Q.STANDARD, L.BATCH, K.LOW),
     AiTaskName.SYNTHESIZE_SIGNALS: ({C.TEXT_GENERATION, C.REASONING, C.STRUCTURED_OUTPUT}, "SignalSynthesisResult", Q.STANDARD, L.BATCH, K.MEDIUM),
 }  # fmt: skip
+
+# Default max_output_units per task (spec section 9, D-26).
+SPEC_OUTPUT_LIMITS = {
+    AiTaskName.GENERATE_HOOK_VARIATIONS: 1500,
+    AiTaskName.EXTRACT_AUDIENCE_SIGNALS: 3000,
+    AiTaskName.SYNTHESIZE_SIGNALS: 4000,
+    AiTaskName.ANALYZE_MARKET_TRENDS: 4000,
+    AiTaskName.ANALYZE_PERFORMANCE: 4000,
+    AiTaskName.GENERATE_CHANNEL_EXECUTION: 4000,
+    AiTaskName.GENERATE_CONTENT_BRIEF: 6000,
+    AiTaskName.GENERATE_CONTENT_DRAFT: 8000,
+}
 
 
 # --- AC-5: task registry ---
@@ -78,6 +91,11 @@ def test_entry_matches_spec_table(task: AiTaskName) -> None:
     assert d.input_modalities == frozenset(TEXT)
     assert d.output_modalities == frozenset(TEXT)
     assert d.allowed_scopes == frozenset(WS)
+    assert d.default_max_output_units == SPEC_OUTPUT_LIMITS[task]
+
+
+def test_output_limit_table_covers_every_generation_task() -> None:
+    assert set(SPEC_OUTPUT_LIMITS) == set(SPEC_TABLE)
 
 
 def test_embed_text_entry() -> None:
@@ -88,6 +106,7 @@ def test_embed_text_entry() -> None:
     assert d.allowed_scopes == {TaskScope.WORKSPACE, TaskScope.SYSTEM}
     assert d.input_modalities == {AiModality.TEXT}
     assert d.output_modalities == frozenset()
+    assert d.default_max_output_units is None
 
 
 def test_only_embed_text_lacks_a_schema_and_only_it_allows_system() -> None:
@@ -110,6 +129,60 @@ def test_definition_forbids_extra_fields() -> None:
     d = AiTaskRegistry().get(AiTaskName.EMBED_TEXT)
     with pytest.raises(ValidationError):
         AiTaskDefinition(**d.model_dump(), model="x")
+
+
+# --- default output limits (D-26) ---
+
+
+def _definition(task: AiTaskName, **overrides: Any) -> AiTaskDefinition:
+    data = AiTaskRegistry().get(task).model_dump()
+    data.update(overrides)
+    return AiTaskDefinition(**data)
+
+
+@pytest.mark.parametrize("task", list(SPEC_TABLE))
+def test_generation_task_needs_a_positive_int_limit(task: AiTaskName) -> None:
+    with pytest.raises(ValidationError):
+        _definition(task, default_max_output_units=None)
+    for bad in (0, -1, True, 1.5, "10"):
+        with pytest.raises(ValidationError):
+            _definition(task, default_max_output_units=bad)
+
+
+def test_embed_text_rejects_an_output_limit() -> None:
+    with pytest.raises(ValidationError):
+        _definition(AiTaskName.EMBED_TEXT, default_max_output_units=100)
+
+
+@pytest.mark.parametrize("task", list(SPEC_TABLE))
+def test_resolve_takes_the_task_default_without_a_request_value(task: AiTaskName) -> None:
+    assert resolve_max_output_units(AiTaskRegistry().get(task), None) == SPEC_OUTPUT_LIMITS[task]
+
+
+@pytest.mark.parametrize(
+    ("request_value", "expected"), [(1, 1), (1000, 1000), (1500, 1500), (1501, 1500), (10**9, 1500)]
+)
+def test_resolve_is_the_minimum_of_request_and_default(request_value: int, expected: int) -> None:
+    definition = AiTaskRegistry().get(AiTaskName.GENERATE_HOOK_VARIATIONS)
+    assert resolve_max_output_units(definition, request_value) == expected
+
+
+@pytest.mark.parametrize("bad", [0, -1, -(10**9)])
+def test_resolve_rejects_values_below_one(bad: int) -> None:
+    with pytest.raises(ValueError):
+        resolve_max_output_units(AiTaskRegistry().get(AiTaskName.SYNTHESIZE_SIGNALS), bad)
+
+
+@pytest.mark.parametrize("bad", [True, False, 1.0, 10.5, "100", b"1"])
+def test_resolve_rejects_non_int_values(bad: Any) -> None:
+    with pytest.raises(ValueError):
+        resolve_max_output_units(AiTaskRegistry().get(AiTaskName.SYNTHESIZE_SIGNALS), bad)
+
+
+@pytest.mark.parametrize("request_value", [None, 1, 100])
+def test_resolve_rejects_embed_text(request_value: int | None) -> None:
+    with pytest.raises(ValueError):
+        resolve_max_output_units(AiTaskRegistry().get(AiTaskName.EMBED_TEXT), request_value)
 
 
 # --- classes and config ---

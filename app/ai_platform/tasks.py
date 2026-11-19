@@ -6,7 +6,7 @@ turned into numbers by ``AiPlatformConfig``, not here.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.ai_platform.enums import (
     AiCapability,
@@ -32,6 +32,36 @@ class AiTaskDefinition(BaseModel):
     input_modalities: frozenset[AiModality]
     output_modalities: frozenset[AiModality]
     allowed_scopes: frozenset[TaskScope]
+    # Default maximum output units (D-26). None only for EMBED_TEXT, which generates no output.
+    default_max_output_units: int | None = Field(default=None, gt=0, strict=True)
+
+    @model_validator(mode="after")
+    def _output_limit_matches_task(self) -> AiTaskDefinition:
+        is_embedding = self.name is AiTaskName.EMBED_TEXT
+        if is_embedding and self.default_max_output_units is not None:
+            raise ValueError("EMBED_TEXT has no output limit")
+        if not is_embedding and self.default_max_output_units is None:
+            raise ValueError("a generation task needs a default output limit")
+        return self
+
+
+def resolve_max_output_units(task_definition: AiTaskDefinition, request_value: int | None) -> int:
+    """The caller-side value of D-26: ``min(request value, task default)``.
+
+    A request can only lower the default. The model maximum is applied later, per candidate, by the
+    Router. ``bool`` and every non-int type raise ``ValueError``, as does a value below 1, and so
+    does an ``EMBED_TEXT`` definition (it has no output).
+    """
+    default = task_definition.default_max_output_units
+    if default is None:
+        raise ValueError("this task has no output limit")
+    if request_value is None:
+        return default
+    if type(request_value) is not int:
+        raise ValueError("max_output_units must be an int")
+    if request_value < 1:
+        raise ValueError("max_output_units must be at least 1")
+    return min(request_value, default)
 
 
 _C = AiCapability
@@ -49,6 +79,7 @@ def _text_task(
     quality: QualityClass,
     latency: LatencyClass,
     cost: CostClass,
+    max_output_units: int,
 ) -> AiTaskDefinition:
     return AiTaskDefinition(
         name=name,
@@ -60,6 +91,7 @@ def _text_task(
         input_modalities=_TEXT,
         output_modalities=_TEXT,
         allowed_scopes=_WORKSPACE,
+        default_max_output_units=max_output_units,
     )
 
 
@@ -71,6 +103,7 @@ _DEFINITIONS: tuple[AiTaskDefinition, ...] = (
         _Q.STANDARD,
         _L.BATCH,
         _K.MEDIUM,
+        4000,
     ),
     _text_task(
         AiTaskName.GENERATE_CONTENT_BRIEF,
@@ -79,6 +112,7 @@ _DEFINITIONS: tuple[AiTaskDefinition, ...] = (
         _Q.HIGH,
         _L.STANDARD,
         _K.HIGH,
+        6000,
     ),
     _text_task(
         AiTaskName.GENERATE_CHANNEL_EXECUTION,
@@ -87,6 +121,7 @@ _DEFINITIONS: tuple[AiTaskDefinition, ...] = (
         _Q.STANDARD,
         _L.STANDARD,
         _K.MEDIUM,
+        4000,
     ),
     _text_task(
         AiTaskName.GENERATE_CONTENT_DRAFT,
@@ -95,6 +130,7 @@ _DEFINITIONS: tuple[AiTaskDefinition, ...] = (
         _Q.HIGH,
         _L.STANDARD,
         _K.HIGH,
+        8000,
     ),
     _text_task(
         AiTaskName.GENERATE_HOOK_VARIATIONS,
@@ -103,6 +139,7 @@ _DEFINITIONS: tuple[AiTaskDefinition, ...] = (
         _Q.STANDARD,
         _L.INTERACTIVE,
         _K.LOW,
+        1500,
     ),
     _text_task(
         AiTaskName.ANALYZE_PERFORMANCE,
@@ -111,6 +148,7 @@ _DEFINITIONS: tuple[AiTaskDefinition, ...] = (
         _Q.HIGH,
         _L.BATCH,
         _K.MEDIUM,
+        4000,
     ),
     _text_task(
         AiTaskName.EXTRACT_AUDIENCE_SIGNALS,
@@ -119,6 +157,7 @@ _DEFINITIONS: tuple[AiTaskDefinition, ...] = (
         _Q.STANDARD,
         _L.BATCH,
         _K.LOW,
+        3000,
     ),
     _text_task(
         AiTaskName.SYNTHESIZE_SIGNALS,
@@ -127,6 +166,7 @@ _DEFINITIONS: tuple[AiTaskDefinition, ...] = (
         _Q.STANDARD,
         _L.BATCH,
         _K.MEDIUM,
+        4000,
     ),
     AiTaskDefinition(
         name=AiTaskName.EMBED_TEXT,
