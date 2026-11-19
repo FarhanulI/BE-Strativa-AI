@@ -36,3 +36,27 @@
 - Never view `.env*` files with any tool; print variable names only. If a secret value is ever shown, report it immediately.
 - Run the database suite with /run-db-suite; never set or print the test password.
 - Neon runs only in an explicitly authorised, separate task; never in other tasks.
+
+## Spec-Driven Development (SDD) governance
+
+Introduced by the SDD migration (see [decisions.md](../docs/decisions.md), SDD-D-1 to SDD-D-4). These rules add to, and never replace, the rules above. Where they overlap, the stricter rule applies. `CLAUDE.md` keeps importing this file.
+
+### Terminology
+
+- **Module**: an architectural ownership boundary. The module map is [docs/modules.md](../docs/modules.md), which documents 37 modules.
+- **Phase**: a delivery grouping and implementation order. The module map has 10 phases (0 to 9). A phase is not a module.
+- **Task**: an independently scoped unit of work within a module.
+- **Milestone**: an owner-reviewed stage of the SDD migration or of project delivery.
+
+### Rules
+
+1. Every implementation task references its approved module specification and the relevant AC/INV IDs.
+2. Every task states its expected implementation and verification evidence before work starts.
+3. Commit messages reference the relevant requirement, decision or task ID where applicable.
+4. If implementation and specification conflict, write a change proposal. Never silently modify an approved spec.
+5. A spec is Draft, Approved or Superseded. An Approved spec identifies its revision and approval date.
+6. A requirement is Specified, Implemented, Verified, Gap or Blocked, as defined in [docs/traceability.md](../docs/traceability.md).
+7. Verified requires dated test execution evidence recorded in `docs/traceability.md` or an associated verification report. A closed phase or an existing test file is not evidence.
+8. Task lists and verification reports are subject to milestone-level owner review.
+9. The security, environment, database and repository safety rules above remain authoritative, including the rule that Neon runs only in an explicitly authorised, separate task.
+10. Decisions made for SDD are recorded in [docs/decisions.md](../docs/decisions.md) under the `SDD-D-n` namespace. Existing `D-n` decisions are never renumbered or redefined there.
