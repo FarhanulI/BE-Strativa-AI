@@ -1,7 +1,7 @@
 # T-015: Real-Redis queue, outbox and lease tests
 
 - **Module and phase:** jobs_workers, events_outbox, observability_audit; Phase 0
-- **State:** Implemented (owner started 2026-11-20; tests written, not yet executed against Redis; awaiting a Redis run, `/run-db-suite all` and review)
+- **State:** Implemented (owner started 2026-11-20; runs recorded 2026-11-20; 3 of 4 requirements `Verified`, OBS-AC-3 stays `Gap`; awaiting owner review)
 - **Requirement IDs:** JOB-AC-2 (currently `Gap`), OUT-AC-3 (`Gap`), OBS-AC-3 (`Gap`), and the lease-reclaim clause of OUT-AC-2 (`Implemented`, partial). JOB-AC-1 and JOB-AC-3 are not changed.
 - **Specification references:** [jobs-workers](../specs/jobs-workers/spec.md), [events-outbox](../specs/events-outbox/spec.md), [observability-audit](../specs/observability-audit/spec.md) acceptance criteria; [conformance report](../architecture/conformance-report.md) E-2, E-4
 - **Dependencies:** T-013 for the CI Redis service (the tests can be developed locally first). T-014 for recording. A real Redis instance. T-002 depends on this task for its JOB rows, which stay `Gap` until it is done.
@@ -49,13 +49,20 @@ API route handlers that publish events do not put a request ID into the outbox m
 - Command: `uv run --python 3.12 --no-sync python scripts/check.py`. Exit code 0. Local Windows, Python 3.12.14. ruff clean; mypy clean; pytest `-m "not db"`: 1698 passed, 4 skipped, 0 failed, 200 deselected. The 4 skipped are the Redis-only job queue tests, skipped because `TEST_REDIS_URL` is not set. The 14 helper tests ran and passed (1684 to 1698 passed).
 - Collection: the 8 new integration tests collect (`pytest --collect-only`): 4 in `tests/redis_integration`, 3 in `test_outbox_relay_redis.py`, 1 in `test_outbox_lease_reclaim.py`.
 
-**NOT RUN:** the 4 Redis-only tests; the 3 `db`+`redis` tests; the lease reclaim test; the local database suite; the CI run (T-013 is deferred). Reasons: no Redis available to the agent (no `TEST_REDIS_URL`), and the database suite is run by the owner through `/run-db-suite`. No requirement is `Verified` by this task.
+**Run 1, 2026-11-20, Redis-only tests** (run by the agent in the owner's session; `TEST_REDIS_URL` set, checked as set or not set only)
+- Command: `uv run --python 3.12 --no-sync python -m pytest tests/redis_integration -q -rs`. Exit code 0. 4 passed, 0 failed, 0 skipped.
+- Environment: local Windows, Python 3.12.14, pytest 9.1.1; Redis `redis:7.4-alpine` in the owner's container `strativa-test-redis` on `127.0.0.1:6379`, database index 15. Container started by the owner, not by the agent. Not Neon, no managed Redis.
+- Requirement covered: JOB-AC-2 (all three clauses).
 
-**To execute (owner):**
-1. Start a local Redis you control, for example `docker run -d --rm --name strativa-test-redis -p 127.0.0.1:6379:6379 redis:7.4-alpine`, and stop it afterwards with `docker stop strativa-test-redis`. The agent does not start Docker.
-2. Set `TEST_REDIS_URL=redis://127.0.0.1:6379/15` in the environment Claude Code runs in (it contains no secret).
-3. Type `/run-db-suite all`: it now also runs the 3 `db`+`redis` tests and the lease reclaim test.
-4. The 4 Redis-only tests run with `uv run --python 3.12 --no-sync python -m pytest tests/redis_integration -q` (the agent can run it; it will ask permission).
+**Run 2, 2026-11-20, local database suite with Redis** (run by the owner through `/run-db-suite all`)
+- Command: `bash scripts/run_db_suite.sh all`. Exit code 0. 200 passed, 0 failed; 1702 deselected (the DB-free tests and the 4 Redis-only tests, which are not `db`-marked). The script prints no skipped count; the progress lines show no skipped test and the passed count equals the selected count (200).
+- Environment: local Postgres container `strativa-test-db` (`TEST_DB_MODE=local`) and the same local Redis (`TEST_REDIS_URL` inherited from the environment). `cleanup done` printed.
+- Included: `test_outbox_relay_redis.py` (3 tests), `test_outbox_lease_reclaim.py` (1), and all earlier DB tests. An earlier attempt with an extra argument was refused by the script (exit 2, no tests, no container).
+- Requirements covered: OUT-AC-3, OUT-AC-2 (rollback, concurrent claim, committed live lease, expired lease reclaim, idempotency), and the correlation test for OBS-AC-3 (outbox, relay, worker, audit).
+
+**Row statuses set by these runs:** JOB-AC-2, OUT-AC-3 and OUT-AC-2 are `Verified`. OBS-AC-3 stays `Gap`: the test passed for outbox, relay, worker and audit, but the API hop is not met (see Finding). Traceability evidence cells link here.
+
+**Still NOT RUN:** the CI run (T-013 deferred); the independent audit; any Neon run. Redis was not run with `REQUIRE_REDIS_TESTS=1`.
 
 ## Review and approval
-Plan started by the owner on 2026-11-20. **Gate: milestone end.** The `pyproject.toml` change is a single added marker, so the gate is not raised; the owner may raise it. Independent audit (sdd.md section 11): NOT RUN.
+Plan started by the owner on 2026-11-20. **Gate: milestone end.** The `pyproject.toml` change is a single added marker, so the gate is not raised; the owner may raise it. Independent audit (sdd.md section 11): NOT RUN. The task is not `Verified` because OBS-AC-3 is not met (API hop, a decision for the owner).
