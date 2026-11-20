@@ -7,7 +7,7 @@ A task is a bounded, owner-approved unit of work. The process, lifecycle and rul
 | Task | Title | Module / phase | State | Blocker or dependency |
 | --- | --- | --- | --- | --- |
 | [T-001](T-001-workspace-neon-concurrency.md) | Workspace Neon TEST-branch concurrency verification | workspace / 1 | Blocked | Separate explicit owner authorization to run on Neon (SDD-D-2) |
-| [T-002](T-002-phase0-reverification.md) | Phase 0 re-verification | Phase 0 modules / 0 | In Progress | Approved 2026-11-20. Real Redis rows wait for T-015; Neon only under separate authorization |
+| [T-002](T-002-phase0-reverification.md) | Phase 0 re-verification | Phase 0 modules / 0 | Implemented | Runs and row audit recorded 2026-11-20; 8 of 56 rows Verified. Awaiting owner review. Real Redis rows wait for T-015; Neon only under separate authorization |
 | [T-003](T-003-phase1-retrospective-verification.md) | Phase 1 retrospective verification gaps | auth, workspace, profile / 1 | Proposed | T-001 for WS-AC-3; owner approval |
 | [T-004](T-004-d32-owner-resolution.md) | D-32 owner resolution | ai_platform / 2 | Blocked | Owner decision |
 | [T-005](T-005-d20-revision-metadata.md) | D-20 revision metadata investigation | ai_platform / 2 | Blocked | New evidence (history) not available |
