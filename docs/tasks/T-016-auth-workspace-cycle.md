@@ -1,7 +1,7 @@
 # T-016: auth and workspace dependency cycle (check, then fix)
 
 - **Module and phase:** auth, workspace, api_contract (composition root); Phase 1 and Phase 0
-- **State:** In Progress (owner started 2026-11-20; step 0 and step 1 done; stopped for the owner review required after step 1; step 2 not started)
+- **State:** Implemented (steps 0 to 2 done 2026-11-20; step 1 exemption approved by the owner; step 2 awaiting the owner's result review)
 - **Requirement IDs:** CORE-INV-11, WS-AC-7 (the boundary rules the check strengthens); AUTH-AC-2 and AUTH-AC-7 (must stay satisfied by the fix)
 - **Specification references:** [auth-onboarding](../specs/auth-onboarding/spec.md) (registration calls `WorkspaceService.create_workspace_for_owner(session, user_id, name)` in the caller-owned transaction; `/me` reads roles through the workspace public interface); [workspace](../specs/workspace/spec.md); [conformance report](../architecture/conformance-report.md) B-1 (corrected 2026-11-20); ADR-0003 (proposed)
 - **Dependencies:** A recorded baseline run of the auth and workspace DB tests before any change (step 0), from T-003 or from this task. T-013 preferred. Owner decisions of 2026-11-20: dependency inversion at the composition root; the protocol takes the caller's session or unit of work; the cycle check includes function-level imports; owner review between step 1 and step 2.
@@ -63,7 +63,23 @@ Excluding that single file leaves exactly one cycle, auth and workspace, matchin
 
 **Step 1 test run:** `uv run --python 3.12 --no-sync python -m pytest tests/unit/architecture/test_package_import_cycles.py -q`: 9 passed.
 
-**NOT RUN:** step 2 (not started); the after-run comparison; the independent audit.
+**Step 2 (2026-11-20, commit `7426ceb`)**
+- Changes: `app/auth/ports.py` (new), `app/auth/routes.py`, `app/auth/__init__.py`, `app/api_contract/app.py`, and the cycle test (allowlist emptied; three tests replace the edge test).
+- DB-free gate: `env -u TEST_REDIS_URL uv run --python 3.12 --no-sync python scripts/check.py`, exit 0, ruff and mypy clean, pytest `-m "not db"`: 1709 passed, 4 skipped, 0 failed, 200 deselected (baseline 1707 plus 2 net new tests). The OpenAPI freshness test and the boundary test are among them.
+- Import check: `app.auth`, `app.workspace`, `app.profile`, `app.api_contract`, `app.events_outbox`, `app.db_migrations` each import in a fresh interpreter.
+- **After-run, first attempt:** `bash scripts/run_db_suite.sh all`, exit 1, 197 passed, 3 errors, 0 failed. The 3 errors were the `db`+`redis` tests in `test_outbox_relay_redis.py`, which fail at fixture setup with "TEST_REDIS_URL is set but Redis is not reachable" because the owner's Redis container was stopped. Not related to the refactor; everything else passed.
+- **After-run, Redis running (owner ran `/run-db-suite all`):** `bash scripts/run_db_suite.sh all`, exit 0, **200 passed, 0 failed**, 1713 deselected, `cleanup done`. Local Postgres container and local Redis, `TEST_DB_MODE=local`.
+- **Comparison:** the before-run (T-015 Run 2, same `app/` code except step 2) was 200 passed; the after-run is 200 passed. `tests/db/test_auth_workspace.py` ran 13 passed in both. Equal counts.
+
+**Acceptance criteria**
+- Cycle test exists, sees function-level imports (seeded fixtures), and passes with an empty allowlist: met (exemption of the Alembic registry approved by the owner).
+- AUTH-AC-2 and AUTH-AC-7 tests pass before and after with the same counts: met (13 in `test_auth_workspace.py` and 200 in total, both runs).
+- No `app.auth` file imports `app.workspace`: met (checked by graph and by the test).
+- OpenAPI output unchanged: met (`test_checked_in_openapi_matches_registered_routes` passes; `openapi.json` untouched).
+
+**Row statuses:** CORE-INV-11, WS-AC-7, AUTH-AC-2, AUTH-AC-7 (and AUTH-INV-1, AUTH-INV-7) stay `Implemented`: each carries Partial coverage notes that this task did not close. Nothing is `Verified` by this task.
+
+**NOT RUN:** the independent audit; CI (T-013 deferred); Neon.
 
 ## Review and approval
-Plan started by the owner on 2026-11-20. **Gate: always** (auth behavior; contracts). Owner review after step 1: **requested now** (see the finding and the exemption decision). Owner review after step 2: not requested.
+Plan started by the owner on 2026-11-20. **Gate: always** (auth behavior; contracts). Owner review after step 1: done, exemption approved 2026-11-20. Owner review after step 2: **requested now** (gate always; ADR-0003 status changed to Accepted as implemented, pending your confirmation).
