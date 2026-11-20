@@ -38,7 +38,10 @@ packages = ["app"]
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
-markers = ["db: requires a test database (Neon test branch, or the local Docker database with TEST_DB_MODE=local)"]
+markers = [
+    "db: requires a test database (Neon test branch, or the local Docker database with TEST_DB_MODE=local)",
+    "redis: requires a real Redis at TEST_REDIS_URL (loopback, non-zero database index); skipped when unset unless REQUIRE_REDIS_TESTS=1",
+]
 
 [tool.ruff]
 target-version = "py312"
