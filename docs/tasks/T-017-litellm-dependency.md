@@ -1,7 +1,7 @@
 # T-017: Add and pin the LiteLLM dependency
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** In Progress (stop 1 approved 2026-11-20 with `litellm==1.109.1`; stop 2 done; waiting for the owner to review the lock diff and approve stop 3)
+- **State:** Implemented (stops 1 to 3 done 2026-11-20 with `litellm==1.109.1`; awaiting the owner's `/run-db-suite all` and result review)
 - **Requirement IDs:** INV-1 and AC-1 (provider SDK imports confined to `app/ai_platform/`). This task is a prerequisite for the adapter and does not change their status.
 - **Specification references:** [AI Platform spec](../specs/ai-platform/spec.md) section 1 (provider abstraction through LiteLLM), INV-1, AC-1, D-21, D-22, section 20.4; [conformance report](../architecture/conformance-report.md) F-4
 - **Dependencies:** T-013 (CI) so that the lock change is tested on a clean install. Owner approval at each stop below. **Always-stop gate: this task never proceeds from one stop to the next without the owner.**
@@ -61,8 +61,26 @@ The owner approved `litellm==1.109.1` (proposed version, not the fallback).
 - The lock's project entry carries `{ name = "litellm", specifier = "==1.109.1" }`.
 - `uv sync` was not run: the local virtual environment is unchanged. Stop 3 runs the clean-install check.
 
+## Stop 3 record (2026-11-20, owner approved)
+All commands ran in a fresh scratch environment (`UV_PROJECT_ENVIRONMENT` in the session scratchpad, directory did not exist beforehand), so the working `.venv` was not used. Local Windows, Python 3.12.14, `uv 0.12.5`. Commit under test: `uv.lock` and `pyproject.toml` as committed in stop 2.
+| # | Command | Exit | Result |
+| --- | --- | --- | --- |
+| 1 | `uv sync --locked --python 3.12` | 0 | installed from the lock; `--locked` means the lock was not modified |
+| 2 | `uv run --locked --no-sync --python 3.12 python -c "importlib.metadata.version(...)"` | 0 | litellm 1.109.1, openai 3.57.0, certifi 2026.10.23 (metadata only; litellm was not imported) |
+| 3 | `env -u TEST_REDIS_URL uv run --locked --no-sync --python 3.12 python scripts/check.py` | 0 | ruff clean; mypy clean (36 files); pytest `-m "not db"`: 1709 passed, 4 skipped, 0 failed, 200 deselected. Same counts as the T-016 baseline. The 4 skipped are the Redis-only tests (`TEST_REDIS_URL` unset for this command). |
+| 4 | `env -u TEST_REDIS_URL uv run --locked --no-sync --python 3.12 python -m pytest tests/unit/architecture -q` | 0 | 111 passed, 0 failed. Includes `test_ai_platform_litellm_boundary.py` (INV-1 and AC-1) and `test_ai_platform_provider_identifiers.py`. |
+| 5 | `uv pip check` against the scratch environment | 0 | "Checked 94 packages", all installed packages are compatible |
+| 6 | `uv lock --check --python 3.12` | 0 | "Resolved 96 packages"; lock matches `pyproject.toml` |
+| 7 | grep for `import litellm` or `from litellm` under `app/` | n/a | 0 matches |
+
+**Acceptance criteria:** `pyproject.toml` pins `litellm==1.109.1` and `uv.lock` matches (rows 1, 6); no file under `app/` imports `litellm` (row 7); the architecture tests pass (row 4); the lock diff was shown to the owner at stop 2 and the owner approved stop 3.
+
+**Requirement status:** INV-1 and AC-1 are unchanged by this task (it is their prerequisite). No row moved.
+
+**NOT RUN:** the database suite for this task (the owner types `/run-db-suite all`; note that `scripts/run_db_suite.sh` uses `uv run`, which will sync the working `.venv` to the new lock on its first run); CI (T-013 deferred); the independent audit; a license review of the transitive packages; a real LiteLLM import or provider call (non-goals).
+
 ## Evidence
-Stops 1 and 2 are recorded above. Stop 3 (DB-free suite, architecture tests, clean `uv sync --locked`): NOT RUN yet.
+Stops 1, 2 and 3 are recorded above.
 
 ## Review and approval
-Stop 1 approved 2026-11-20; stop 2 done; waiting for the owner's lock-diff review and approval of stop 3. **Gate: always** (dependency). The owner must approve each of the three stops.
+All three stops approved and done on 2026-11-20. Result review requested (gate always: dependency). Independent audit (sdd.md section 11): NOT RUN. **Gate: always** (dependency). The owner must approve each of the three stops.
