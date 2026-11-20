@@ -54,7 +54,7 @@ None.
 
 ## Not run
 
-`/run-db-suite all` (to be run by the owner after review; no database path changed). Any provider call (none exists; D-27). LiteLLM id check for both Gemini ids against the installed `litellm==1.109.1` (adapter task).
+`/run-db-suite all` was run later by the owner: 200 passed, 0 failed, exit 0 (recorded in the task Evidence). Any provider call (none exists; D-27). LiteLLM id check for both Gemini ids against the installed `litellm==1.109.1` (adapter task).
 
 ## Open items and judgment calls (owner review)
 
