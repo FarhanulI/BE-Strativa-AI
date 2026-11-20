@@ -20,7 +20,7 @@ This is the central index and cross-module decision record. It is **not** a repl
 
 ## 2. SDD migration decisions (new)
 
-SDD-D-1 to SDD-D-4 were made by the owner on **2026-11-19** and are recorded as supplied for the SDD migration. SDD-D-5 and SDD-D-6 are the accepted migration decisions of the finalization milestone, recorded the same day. SDD-D-7 resumes product development.
+SDD-D-1 to SDD-D-4 were made by the owner on **2026-11-19** and are recorded as supplied for the SDD migration. SDD-D-5 and SDD-D-6 are the accepted migration decisions of the finalization milestone, recorded the same day. SDD-D-7 resumes product development. SDD-D-8 (2026-11-20) supersedes SDD-D-4 in part.
 
 ### SDD-D-1: Phase 1 is owner-declared closed
 
@@ -102,6 +102,16 @@ SDD-D-1 to SDD-D-4 were made by the owner on **2026-11-19** and are recorded as 
   - Workspace Neon concurrency verification stays mandatory and needs separate explicit authorization (SDD-D-2). This decision authorizes no Neon operation.
   - Existing architecture, module boundaries, phase sequencing and security rules remain authoritative.
   - Existing verification gaps stay visible. No requirement is `Verified` without dated execution evidence.
+
+### SDD-D-8: Risk-tiered result review
+
+- **Date:** 2026-11-20
+- **Status:** Accepted (owner approval of T-012, 2026-11-20)
+- **Decision:** Supersedes SDD-D-4 in part. Owner result review is per task for tasks that change database migrations, contracts, authentication or security behavior, dependencies, ADRs or AI targets, and per milestone for all other tasks. SDD-D-4 is unchanged for tasks outside those categories and remains in force for them. SDD-D-4's text is not edited.
+- **Rationale:** Milestone-only review lets high-risk changes pile up unreviewed. Routine work keeps the low-overhead cadence of SDD-D-4.
+- **Consequences:**
+  - Plan approval is always required. A task that touches several categories takes the strictest tier; the owner may raise it.
+  - The wording is in [sdd.md](sdd.md) sections 9 to 13 and rules 18 to 22 of [.github/copilot-instructions.md](../.github/copilot-instructions.md) (task [T-012](tasks/T-012-sdd-process-amendment.md)).
 
 ## 3. Index of existing AI Platform decisions (D-1 to D-35)
 
