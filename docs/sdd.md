@@ -2,7 +2,7 @@
 
 This is the single process document for how work is specified, tasked, implemented, verified and accepted in this repository. It defines process only. It does not restate requirements, decisions or architecture; it links to the documents that own them.
 
-Agent rules that enforce this process are in [.github/copilot-instructions.md](../.github/copilot-instructions.md) (imported by `CLAUDE.md`). Decisions that created this process are SDD-D-1 to SDD-D-6 in [decisions.md](decisions.md).
+Agent rules that enforce this process are in [.github/copilot-instructions.md](../.github/copilot-instructions.md) (imported by `CLAUDE.md`). Decisions that created this process are SDD-D-1 to SDD-D-8 in [decisions.md](decisions.md).
 
 ## 1. Authority hierarchy
 
@@ -52,7 +52,7 @@ Safety, environment, database and repository rules in the Standing rules of [.gi
 5. **Implementation.** Work only inside the task scope. Keep module boundaries (public interfaces and domain events only). Commit and push after each logical step with a message that cites the task and requirement IDs.
 6. **Tests.** Add or update tests for each applicable acceptance criterion. Tests that cross a module or tenant boundary need isolation coverage. The database suite runs only through `/run-db-suite`. Neon runs only in a separately authorized task.
 7. **Evidence.** Execute the tests. Record the actual result with date, command or skill used, environment and counts in the task and in [traceability.md](traceability.md). Never record a result that was not produced.
-8. **Review.** The owner reviews at milestone level (SDD-D-4).
+8. **Review.** The owner reviews at milestone level (SDD-D-4), except for the task categories that section 9 reviews per task (SDD-D-8). An independent audit (section 11) precedes owner review.
 9. **Completion.** A task is `Accepted` only after owner review. Update status of each requirement row from the recorded evidence.
 
 ## 5. Tasks
@@ -102,4 +102,50 @@ Skills under `.claude/skills/` implement this process. They contain procedure on
 | `sdd-implement` | Implement a `Ready` task with requirement-tagged tests and commits |
 | `sdd-verify` | Record execution evidence and update traceability |
 | `sdd-close-milestone` | Check the milestone, validate docs, and stop for owner review |
+| `sdd-kickoff-phase` | Read-only check of whether a phase is ready to start; proposes tasks, creates none |
+| `sdd-arch-check` | Module boundaries, import cycles, table ownership and decision coverage, using the DB-free architecture tests |
 | `run-db-suite` (existing) | The only way to run the database suite. Unchanged |
+
+Read-only reviewer agents for section 11 are in `.claude/agents/`: `spec-auditor`, `pm-reviewer`, `architect-reviewer`, `ai-reviewer`.
+
+## 9. Risk-tiered review gates (SDD-D-8)
+
+New wording, approved by the owner on 2026-11-20 through T-012.
+
+- **Plan approval is always required** before work starts. A `Ready` task is that approval.
+- **Result review is always required, before the next task starts,** for a task that changes any of: database migrations; contracts (public service interfaces, API or OpenAPI schemas, event contracts); authentication or security behavior; dependencies (`pyproject.toml`, `uv.lock`, CI actions); ADRs; AI targets (model catalog, thresholds, eval datasets, the task registry).
+- **For every other task,** result review happens at milestone end (SDD-D-4 unchanged for these).
+- The author classifies the task in its "Review and approval" section. The owner may raise the tier. A task that touches several tiers takes the strictest one.
+
+## 10. Evidence-based reporting
+
+New wording, approved 2026-11-20 (T-012).
+
+- A report that claims verification states, for each command: the exact command line (secrets omitted), exit code, counts (passed, failed, skipped, errors), environment, and date.
+- Anything that was not executed is written `NOT RUN`, with the reason. Phrases such as "should pass" or "presumably" are not used.
+- `Verified` in [traceability.md](traceability.md) needs an Evidence cell that links to a dated record containing those fields (a file in `docs/reports/` or a task Evidence section). A row without a link is not `Verified`.
+
+## 11. Independent audit
+
+New wording, approved 2026-11-20 (T-012).
+
+- Before a task moves to `Verified` or goes to owner review, a read-only reviewer in a fresh context audits it. The reviewer receives the task, the spec text, the diff and the evidence records, and does not receive the author's conclusions.
+- Reviewers are the agents in `.claude/agents/`: `spec-auditor` always; `pm-reviewer`, `architect-reviewer` and `ai-reviewer` where their area applies.
+- The audit reports **PASS, PARTIAL or FAIL for each acceptance criterion**, each with the evidence it relied on. PARTIAL and FAIL block `Verified`. An audit changes no status; the author of the evidence and the owner do.
+- The implementing session never audits its own task.
+
+## 12. Safety tiers
+
+New wording, approved 2026-11-20 (T-012). Adds to, and never relaxes, the Standing rules.
+
+- **Allowed without asking:** read-only inspection; DB-free tests, `ruff`, `mypy`; the local database suite through `/run-db-suite`; `git add`, `git commit` and non-force `git push` on the working branch.
+- **Ask first:** dependency changes; any Neon access; deploys; destructive operations (`rm -rf`, `git clean`, force push, dropping a database); paid or real-provider API calls; handling secrets; editing an approved spec; running downloaded code.
+- **Never:** the agent starting the Docker daemon; reading `.env*` files; printing secret values; Neon through MCP (denied in `.claude/settings.json`); force push.
+- **Docker:** the agent never starts the daemon. `scripts/run_db_suite.sh` may create and remove only the container `strativa-test-db`, with a fixed container name and port (`127.0.0.1:55444`, see `compose.test-db.yaml`), no `volume`, `prune` or `system` commands, and no non-local target (refused by `require_local_test_targets` in local mode). Checked by reading on 2026-11-20: the script itself contains no explicit non-local check; the guard does.
+
+## 13. Eval gate for AI task specs
+
+New wording, approved 2026-11-20 (T-012).
+
+- No spec that defines an AI task may be approved without measurable thresholds and a hand-labeled golden set, as described in [evals/README.md](evals/README.md).
+- Not retroactive: `ai_platform` is infrastructure and defines no domain AI task (D-6). The rule applies to the first domain spec that does (for example `brief`, `signal_synthesizer`).
