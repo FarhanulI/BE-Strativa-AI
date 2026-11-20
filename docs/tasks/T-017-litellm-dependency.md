@@ -1,7 +1,7 @@
 # T-017: Add and pin the LiteLLM dependency
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** Implemented (stops 1 to 3 done 2026-11-20 with `litellm==1.109.1`; DB suite 200 passed; awaiting owner result review)
+- **State:** Accepted (stops 1 to 3 done 2026-11-20 with `litellm==1.109.1`; DB suite 200 passed; result accepted by the owner 2026-11-20)
 - **Requirement IDs:** INV-1 and AC-1 (provider SDK imports confined to `app/ai_platform/`). This task is a prerequisite for the adapter and does not change their status.
 - **Specification references:** [AI Platform spec](../specs/ai-platform/spec.md) section 1 (provider abstraction through LiteLLM), INV-1, AC-1, D-21, D-22, section 20.4; [conformance report](../architecture/conformance-report.md) F-4
 - **Dependencies:** T-013 (CI) so that the lock change is tested on a clean install. Owner approval at each stop below. **Always-stop gate: this task never proceeds from one stop to the next without the owner.**
