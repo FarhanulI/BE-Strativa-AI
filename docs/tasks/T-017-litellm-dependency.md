@@ -1,7 +1,7 @@
 # T-017: Add and pin the LiteLLM dependency
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** Implemented (stops 1 to 3 done 2026-11-20 with `litellm==1.109.1`; awaiting the owner's `/run-db-suite all` and result review)
+- **State:** Implemented (stops 1 to 3 done 2026-11-20 with `litellm==1.109.1`; DB suite 200 passed; awaiting owner result review)
 - **Requirement IDs:** INV-1 and AC-1 (provider SDK imports confined to `app/ai_platform/`). This task is a prerequisite for the adapter and does not change their status.
 - **Specification references:** [AI Platform spec](../specs/ai-platform/spec.md) section 1 (provider abstraction through LiteLLM), INV-1, AC-1, D-21, D-22, section 20.4; [conformance report](../architecture/conformance-report.md) F-4
 - **Dependencies:** T-013 (CI) so that the lock change is tested on a clean install. Owner approval at each stop below. **Always-stop gate: this task never proceeds from one stop to the next without the owner.**
@@ -77,7 +77,9 @@ All commands ran in a fresh scratch environment (`UV_PROJECT_ENVIRONMENT` in the
 
 **Requirement status:** INV-1 and AC-1 are unchanged by this task (it is their prerequisite). No row moved.
 
-**NOT RUN:** the database suite for this task (the owner types `/run-db-suite all`; note that `scripts/run_db_suite.sh` uses `uv run`, which will sync the working `.venv` to the new lock on its first run); CI (T-013 deferred); the independent audit; a license review of the transitive packages; a real LiteLLM import or provider call (non-goals).
+**Local database suite, 2026-11-20 (owner ran `/run-db-suite all`):** `bash scripts/run_db_suite.sh all`, exit 0, 200 passed, 0 failed, 1713 deselected, `cleanup done`. Local Postgres container and local Redis (`TEST_REDIS_URL` set, Redis running), `TEST_DB_MODE=local`. The run's `uv run` synced the working `.venv` to the new lock first ("Uninstalled 2 packages, Installed 45 packages": litellm and its 43 new dependencies plus the updated `certifi`, as in the lock diff). Same count as the T-016 after-run (200).
+
+**NOT RUN:** CI (T-013 deferred); the independent audit; a license review of the transitive packages; a real LiteLLM import or provider call (non-goals).
 
 ## Evidence
 Stops 1, 2 and 3 are recorded above.
