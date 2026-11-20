@@ -1,7 +1,7 @@
 # T-014: Traceability evidence format
 
 - **Module and phase:** None (SDD process support); serves T-002 and T-003
-- **State:** Implemented (owner started 2026-11-20; awaiting the owner's `/run-db-suite all` and acceptance)
+- **State:** Implemented (owner started 2026-11-20; awaiting owner acceptance)
 - **Requirement IDs:** None: process support. It changes no requirement and no status.
 - **Specification references:** [traceability.md](../traceability.md) rules 1 to 11; [sdd.md](../sdd.md) sections 4 and 6; T-012 proposals P-2 and P-3
 - **Dependencies:** T-012 approved (it defines the evidence rule this task puts into a template). Must exist before T-002 records its first result.
@@ -35,7 +35,7 @@ The template exists, contains every P-2 field, and a trial record built from it 
 - Trial record (scratchpad, not committed): built from the template with one unexecuted command; it renders `NOT RUN` with its reason in the Not run table. This is the acceptance trial.
 - Link check (ad-hoc local script, not `sdd-close-milestone`): 27 links in the 2 changed markdown files, 1 flagged. The flagged item is the literal placeholder `reports/<file>.md#<anchor>` inside a code span of the procedure note, not a real link. Exit code of the script was 1 for that reason.
 - Note: the 8 traceability rows verified in T-002 link to `tasks/T-002-phase0-reverification.md#evidence`, not to a `docs/reports/` record in this format. This task changes no row (non-goal); migrating them is a candidate follow-up.
-- Local database suite for this task: NOT RUN yet (asked of the owner; this task changes documentation only).
+- Local database suite: NOT RUN, not applicable. The owner clarified on 2026-11-20 that `/run-db-suite all` is run for tasks that implement something for a phase; this task changes documentation only. An attempted run was stopped by the owner before it produced output, and no container was left behind (checked with `docker ps -a`).
 - `sdd-close-milestone`: NOT RUN. Independent audit: NOT RUN.
 
 ## Review and approval
