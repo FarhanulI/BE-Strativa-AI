@@ -1,7 +1,7 @@
 # T-012: SDD process amendment (change proposal, documentation only)
 
 - **Module and phase:** Not applicable (SDD process); applies to every phase
-- **State:** Proposed
+- **State:** Implemented (owner approved P-1 to P-6 as drafted on 2026-11-20; awaiting acceptance)
 - **Requirement IDs:** None. This task changes process documents, not a module specification. It supersedes SDD-D-4 in part through a new decision, SDD-D-8, following [sdd.md](../sdd.md) section 7.
 - **Specification references:** [sdd.md](../sdd.md) sections 4 to 8; [decisions.md](../decisions.md) SDD-D-4; [.github/copilot-instructions.md](../../.github/copilot-instructions.md) rules 1 to 17; [conformance report](../architecture/conformance-report.md)
 - **Dependencies:** Owner approval. **SDD-D-4 stays in force until the owner approves this task.** Nothing below is applied to `sdd.md`, `copilot-instructions.md` or `decisions.md` before that approval.
@@ -73,7 +73,8 @@ None (documentation). `sdd-close-milestone` checks run after the edit.
 - If approved, the three documents contain the wording, SDD-D-4 is untouched, and no existing rule is duplicated.
 
 ## Evidence
-None recorded.
+- 2026-11-20: P-1 to P-5 applied to [sdd.md](../sdd.md) sections 9 to 13 and rules 18 to 22 of copilot-instructions; P-6 applied to sdd.md section 8; SDD-D-8 recorded in [decisions.md](../decisions.md). SDD-D-4 text not edited. Three consistency edits beyond the proposed wording, to avoid contradicting the new rules: sdd.md step 8 and the intro line (SDD-D-1 to SDD-D-8), and copilot rule 8 each point to the new sections.
+- 2026-11-20, local, ad-hoc relative-link check over the 6 changed markdown files (`python check_links.py`, a scratchpad script that is not in the repo): exit 0, 94 links checked, 0 broken; `.claude/settings.json` parsed as valid JSON. This is not a `sdd-close-milestone` run: `sdd-close-milestone` is NOT RUN.
 
 ## Review and approval
-Not requested. **Gate: always** (governance). Owner decision needed on each of P-1 to P-6.
+Plan and wording approved by the owner on 2026-11-20. **Gate: always** (governance). Result review and acceptance: pending. Independent audit (section 11): NOT RUN.

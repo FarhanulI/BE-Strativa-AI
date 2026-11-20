@@ -1,7 +1,7 @@
 # T-002: Phase 0 re-verification
 
 - **Module and phase:** core, events_outbox, jobs_workers, observability_audit, db_migrations, api_contract; Phase 0
-- **State:** Proposed
+- **State:** Ready (owner approved 2026-11-20)
 - **Requirement IDs:** CORE-INV-1..11, CORE-AC-1..11, OUT-INV-1..4, OUT-AC-1..3, JOB-INV-1..4, JOB-AC-1..3, OBS-INV-1..3, OBS-AC-1..3, DBM-INV-1..4, DBM-AC-1..4, API-INV-1..3, API-AC-1..3
 - **Specification references:** The six Phase 0 specs under [docs/specs/](../specs/); [Phase 0 verification report](../reports/phase0-verification.md)
 - **Dependencies:** Owner approval. A real Redis instance for worker tests. Any Neon execution requires a separate authorization (see T-001). Local DB tests run only through `/run-db-suite`.
@@ -31,4 +31,4 @@ Every Phase 0 row is either `Verified` with dated matching evidence or stays `Ga
 None recorded by this migration. Existing historical evidence: [phase0-verification.md](../reports/phase0-verification.md), dated 2026-10-14.
 
 ## Review and approval
-Not requested.
+Plan approved by the owner on 2026-11-20 (`Ready`). Gate: milestone end (documentation and evidence only; no migration, contract, security, dependency, ADR or AI-target change), subject to the owner raising it. Independent audit (sdd.md section 11) precedes review. Real-Redis rows stay `Gap` until T-015 provides a Redis run; Neon-named rows stay open without a separate authorization.
