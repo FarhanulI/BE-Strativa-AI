@@ -58,7 +58,7 @@ Introduced by the SDD migration (see [decisions.md](../docs/decisions.md), SDD-D
 5. A spec is Draft, Approved or Superseded. An Approved spec identifies its revision and approval date.
 6. A requirement is Specified, Implemented, Verified, Gap or Blocked, as defined in [docs/traceability.md](../docs/traceability.md).
 7. Verified requires dated test execution evidence recorded in `docs/traceability.md` or an associated verification report. A closed phase or an existing test file is not evidence.
-8. Task lists and verification reports are subject to milestone-level owner review.
+8. Task lists and verification reports are subject to milestone-level owner review, except for the categories that rule 18 reviews per task.
 9. The security, environment, database and repository safety rules above remain authoritative, including the rule that Neon runs only in an explicitly authorised, separate task.
 10. Decisions made for SDD are recorded in [docs/decisions.md](../docs/decisions.md) under the `SDD-D-n` namespace. Existing `D-n` decisions are never renumbered or redefined there.
 
@@ -73,3 +73,8 @@ Defined in [docs/sdd.md](../docs/sdd.md). They add to the rules above and never 
 15. Never reuse or renumber a requirement ID. Never silently change an approved spec; write a change proposal (rule 4). Record new decisions as `SDD-D-n` and never override an existing decision.
 16. The database suite runs only through `/run-db-suite`. Do not create commands or scripts that bypass the database, Neon, secret or environment rules.
 17. Stop and report when owner approval or external authorization is required (Neon, spec approval, a new decision, scope change, missing spec). A `Blocked` task stays `Blocked`; do not work around it.
+18. Plan approval is always required. Result review is required before the next task starts for tasks that change migrations, contracts, authentication or security behavior, dependencies, ADRs or AI targets; all other tasks are reviewed at milestone end. The strictest tier applies ([sdd.md](../docs/sdd.md) section 9, SDD-D-8).
+19. Verification reports give the exact command, exit code, counts, environment and date for each command. Anything not executed is written `NOT RUN` with the reason. `Verified` needs an Evidence cell that links to such a record (section 10).
+20. Before a task moves to `Verified` or to owner review, a fresh-context, read-only reviewer audits it and reports PASS, PARTIAL or FAIL per acceptance criterion. The implementing session never audits its own task (section 11).
+21. Safety tiers: read-only inspection, DB-free tests, `/run-db-suite` and non-force git on the working branch need no ask; dependencies, Neon, deploys, destructive operations, paid API calls, secrets, approved-spec edits and downloaded code ask first; the agent never starts the Docker daemon, reads `.env*`, prints secrets, uses Neon through MCP or force-pushes (section 12).
+22. No spec that defines an AI task is approved without measurable thresholds and a hand-labeled golden set ([docs/evals/README.md](../docs/evals/README.md)). Not retroactive to `ai_platform` (section 13).
