@@ -1,7 +1,7 @@
 # T-018: Model catalog verification from official documentation
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** Ready (plan approved by the owner 2026-11-20; blocked at stop 1 on CP-1 approval before any code)
+- **State:** In Progress (plan approved 2026-11-20; CP-1 approved with Option A; stop 2 facts recorded, awaiting owner review before stop 3)
 - **Requirement IDs:** AC-60 (catalog fitness; currently `Specified`). Context: D-21, D-22, D-26, D-27, D-28 and spec section 20.4.
 - **Specification references:** [AI Platform spec](../specs/ai-platform/spec.md) sections 9, 10.1, 12.2, 17.4 (AC-60), 20.3, 20.4; [conformance report](../architecture/conformance-report.md) F-1
 - **Dependencies:** T-017 (LiteLLM installed, for the LiteLLM identifier checks). Owner approval of the catalog format. Web access to official documentation. No provider API call is made, so the spend cap (D-11, D-16) is not touched and D-27 is not engaged.
@@ -37,6 +37,7 @@ A record (T-014 format) with the list of fetched URLs and dates, the verified fa
 
 ## Evidence
 - 2026-11-20 stop 1: SDD-Q-3 answered by reading spec 10.1 and 20.4: they do not define `verified`, `verified_on`, large-prompt tiers or `required_min_input_units`. Change proposal written: [CP-1](../specs/ai-platform/change-proposals/CP-1-catalog-verification-fields.md). No code, fetch or spec edit has happened.
+- 2026-11-20 stop 2: CP-1 approved with Option A. Official sources fetched and the facts recorded in [the stop 2 record](../reports/2026-11-20-T-018-stop2-verified-facts.md). Six findings need owner decisions; nothing is written to the catalog yet.
 
 ## Review and approval
 Not requested. **Gate: always** (AI targets; possible contract change).

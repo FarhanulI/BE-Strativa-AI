@@ -1,6 +1,6 @@
 # CP-1: Catalog verification fields (change proposal for the AI Platform spec)
 
-- **Status:** Proposed (not applied; the approved spec is unchanged)
+- **Status:** Approved by the owner 2026-11-20 with Option A for item 4 (items 1 to 3, 5, 6 as written). The spec text (revision 8) is applied at the start of T-018 stop 3; until then `spec.md` is unchanged.
 - **Raised by:** task [T-018](../../../tasks/T-018-model-catalog-verification.md), 2026-11-20
 - **Spec revision it would amend:** revision 7. Sections 10.1 and 17.5 (AC-60). Answers SDD-Q-3.
 - **Rule:** SDD rules 4 and 15. Nothing in `spec.md` is edited until the owner approves this proposal and records a new revision.
