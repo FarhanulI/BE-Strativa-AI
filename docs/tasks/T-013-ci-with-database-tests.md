@@ -1,7 +1,7 @@
 # T-013: CI with database tests (verification infrastructure)
 
 - **Module and phase:** None of its own. Verification infrastructure that serves T-002 (Phase 0) and T-003 (Phase 1). It is not the `delivery` module (Phase 9, no specification).
-- **State:** In Progress (owner started 2026-11-20 after accepting T-002; plan decisions below)
+- **State:** Blocked (owner deferred 2026-11-20: "no need of T-013 at the moment"). Previous state: In Progress. The workflow is committed (`11f779f`); its CI runs are not verified
 - **Requirement IDs:** None: dependency on T-002 and T-003. The task executes tests already mapped in [traceability.md](../traceability.md); it adds no product behavior and satisfies no requirement by itself.
 - **Specification references:** [conformance report](../architecture/conformance-report.md) findings E-1, C-1; [README Test database modes](../../README.md); DBM-AC-4 (the fixture and guard are used unchanged)
 - **Dependencies:** T-002 approved first. T-012 approved (gates, safety tiers). For fork pull requests, no secrets are used.
@@ -46,7 +46,8 @@ A recorded CI run on a pull request from a branch of this repository: run URL, d
 **Local, 2026-11-20** (before the first CI run)
 - Command: `uv run --python 3.12 --no-sync python scripts/check.py`. Exit code 0. Local Windows, Python 3.12.14. ruff clean; mypy clean; pytest `-m "not db"`: 1684 passed, 0 failed, 196 deselected (5 new tests in `test_ci_workflow_safety.py`).
 - The workflow YAML parses (`yaml.safe_load`): jobs `checks` and `database`, triggers `pull_request` and `push`.
-- **GitHub Actions run: NOT RUN yet.** It starts when this commit is pushed. The run URL, job results and counts are recorded below once read. A deliberately failing change to confirm a red job: NOT RUN.
+- **Local database suite, 2026-11-20, same code as the workflow commit `11f779f`:** `bash scripts/run_db_suite.sh all` (owner ran `/run-db-suite all`), exit 0, 196 passed, 0 failed, 1684 deselected; local container, `TEST_DB_MODE=local`; `cleanup done`. This is not a CI run and does not satisfy the CI acceptance criteria.
+- **GitHub Actions run: NOT RUN (deferred by the owner).** It starts when this commit is pushed. The run URL, job results and counts are recorded below once read. A deliberately failing change to confirm a red job: NOT RUN.
 
 ## Review and approval
-Plan started by the owner on 2026-11-20. **Gate: always** (dependencies: CI actions). Result review required before T-014 starts. Independent audit (sdd.md section 11): NOT RUN.
+Plan started by the owner on 2026-11-20. **Gate: always** (dependencies: CI actions). Owner deferred the task on 2026-11-20 (Blocked until the owner resumes it). Result review is still required before it can be accepted. Independent audit (sdd.md section 11): NOT RUN.
