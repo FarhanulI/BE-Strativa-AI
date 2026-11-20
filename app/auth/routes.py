@@ -6,7 +6,9 @@ from fastapi import Depends, FastAPI, Request, Response
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import AuthService, AuthSession, User, UserRegistered
+from app.auth.events import UserRegistered
+from app.auth.models import AuthSession, User
+from app.auth.ports import WorkspaceProvisioner, WorkspaceRoleReader
 from app.auth.schemas import (
     AuthResponse,
     LoginRequest,
@@ -26,6 +28,7 @@ from app.auth.security import (
     verify_password,
 )
 from app.auth.service import (
+    AuthService,
     allow_login_attempt,
     audit_auth_action,
     create_auth_session,
@@ -34,13 +37,17 @@ from app.auth.service import (
 from app.core import Conflict, SystemClock, Unauthenticated
 from app.db_migrations import database_session
 from app.events_outbox import publish
-from app.workspace import WorkspaceAccessService, WorkspaceService
 
 _SESSION_COOKIE = "refresh_token"
 _COOKIE_PATH = "/api/v1/auth"
 
 
-def register_routes(app: FastAPI) -> None:
+def register_routes(
+    app: FastAPI,
+    *,
+    workspace_provisioner: WorkspaceProvisioner,
+    workspace_roles: WorkspaceRoleReader,
+) -> None:
     @app.post("/api/v1/auth/register", response_model=AuthResponse, tags=["auth"])
     async def register(
         body: RegisterRequest,
@@ -61,7 +68,7 @@ def register_routes(app: FastAPI) -> None:
         )
         session.add(user)
         await session.flush()
-        workspace = await WorkspaceService.create_workspace_for_owner(
+        workspace = await workspace_provisioner.create_workspace_for_owner(
             session, user.id, body.workspace_name
         )
         await publish(
@@ -120,7 +127,7 @@ def register_routes(app: FastAPI) -> None:
             ip=ip,
         )
         await audit_auth_action(session, action="auth.login_success", actor_id=user.id)
-        workspaces = await WorkspaceAccessService.list_workspaces_for_user(session, user.id)
+        workspaces = await workspace_roles.list_workspaces_for_user(session, user.id)
         _set_refresh_cookie(response, refresh_token)
         return AuthResponse(
             access_token=create_access_token(
@@ -223,7 +230,7 @@ def register_routes(app: FastAPI) -> None:
         user: Annotated[User, Depends(AuthService.get_current_user)],
         session: Annotated[AsyncSession, Depends(database_session)],
     ) -> MeResponse:
-        workspaces = await WorkspaceAccessService.list_workspaces_for_user(session, user.id)
+        workspaces = await workspace_roles.list_workspaces_for_user(session, user.id)
         return MeResponse(
             user=UserResponse(id=user.id, email=user.email, display_name=user.display_name),
             workspaces=[
@@ -249,7 +256,7 @@ def register_routes(app: FastAPI) -> None:
             action="auth.display_name_updated",
             actor_id=user.id,
         )
-        workspaces = await WorkspaceAccessService.list_workspaces_for_user(session, user.id)
+        workspaces = await workspace_roles.list_workspaces_for_user(session, user.id)
         return MeResponse(
             user=UserResponse(id=user.id, email=user.email, display_name=user.display_name),
             workspaces=[

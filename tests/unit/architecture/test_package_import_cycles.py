@@ -1,9 +1,9 @@
 """T-016 step 1: the package import graph of ``app/`` must be acyclic.
 
 Requirements strengthened: CORE-INV-11 and WS-AC-7 (boundary rules). The graph sees every import
-statement, including those inside functions and methods, such as the lazy import in
-``app/auth/__init__.py`` ``register_routes``. Limit: string-based dynamic imports are not visible
-to an AST walk and are out of scope.
+statement, including those inside functions and methods (before T-016 step 2 the auth routes were
+loaded lazily from ``app/auth/__init__.py``; the AST saw their import anyway). Limit: string-based
+dynamic imports are not visible to an AST walk and are out of scope.
 
 ``REGISTRY_EXEMPT_FILES`` is a second visible list. ``app/db_migrations/alembic/env.py`` is the
 Alembic metadata registry (ADR-0005): it must import every module's models, and every module imports
@@ -11,9 +11,9 @@ Alembic metadata registry (ADR-0005): it must import every module's models, and 
 into a single cycle of eight packages, so it is excluded, and a test checks that nothing in ``app/``
 imports it (the exemption stays sound).
 
-``KNOWN_CYCLES`` is the visible allowlist. It lists exactly one known cycle, auth and workspace
-(conformance report B-1, ADR-0003). T-016 step 2 removes the entry; a stale entry (a listed cycle
-that no longer exists) also fails, so the allowlist cannot be forgotten.
+``KNOWN_CYCLES`` is the visible allowlist. Before T-016 step 2 it listed the one known cycle, auth
+and workspace (conformance report B-1, ADR-0003); step 2 emptied it. A stale entry (a listed cycle
+that no longer exists) fails, and any new cycle fails.
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ APP_DIRECTORY = Path(__file__).parents[3] / "app"
 # The Alembic metadata registry (ADR-0005, owner review of T-016 step 1). Nothing may import it.
 REGISTRY_EXEMPT_FILES = ("db_migrations/alembic/env.py",)
 
-# T-016 step 2 removes this entry. Do not add entries without an owner-approved task.
-KNOWN_CYCLES: set[frozenset[str]] = {frozenset({"auth", "workspace"})}
+# Empty since T-016 step 2 (ADR-0003). Do not add entries without an owner-approved task.
+KNOWN_CYCLES: set[frozenset[str]] = set()
 
 
 def _write(root: Path, relative: str, source: str) -> None:
@@ -64,10 +64,36 @@ def test_without_the_exemption_the_registry_makes_one_large_cycle() -> None:
     assert len(cycles) == 1 and {"auth", "workspace", "db_migrations"} <= cycles[0]
 
 
-def test_known_cycle_edges_are_visible() -> None:
+def test_auth_depends_on_no_workspace_name_and_workspace_still_uses_auth() -> None:
+    """T-016 step 2 (ADR-0003): the one remaining direction is workspace -> auth."""
     graph = build_package_graph(APP_DIRECTORY, exclude=REGISTRY_EXEMPT_FILES)
-    assert "workspace" in graph["auth"], "auth -> workspace edge (function-level) must be visible"
+    assert "workspace" not in graph["auth"]
     assert "auth" in graph["workspace"]
+
+
+def test_auth_routes_cannot_be_registered_without_the_workspace_implementations() -> None:
+    """AUTH-AC-2 and AUTH-AC-7 keep working only if the composition root passes both in."""
+    import inspect
+
+    from app.auth import register_routes
+
+    parameters = inspect.signature(register_routes).parameters
+    for name in ("workspace_provisioner", "workspace_roles"):
+        assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameters[name].default is inspect.Parameter.empty
+
+
+def test_wired_workspace_classes_match_the_auth_protocol_signatures() -> None:
+    import inspect
+
+    from app.workspace import WorkspaceAccessService, WorkspaceService
+
+    provision = inspect.signature(WorkspaceService.create_workspace_for_owner)
+    assert list(provision.parameters) == ["session", "user_id", "name"]
+    assert inspect.iscoroutinefunction(WorkspaceService.create_workspace_for_owner)
+    read = inspect.signature(WorkspaceAccessService.list_workspaces_for_user)
+    assert list(read.parameters)[:2] == ["session", "user_id"]
+    assert inspect.iscoroutinefunction(WorkspaceAccessService.list_workspaces_for_user)
 
 
 def test_checker_detects_a_seeded_module_level_cycle(tmp_path: Path) -> None:
