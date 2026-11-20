@@ -1,0 +1,18 @@
+# Open questions (SDD)
+
+Questions that need an owner decision. IDs use the `SDD-Q-n` namespace so they never collide with the historical AI Platform `OQ-n` questions in [that spec, section 19](specs/ai-platform/spec.md) (OQ-1 to OQ-3 stay there and are not copied). A recommended default is not a decision. Decisions are recorded in [decisions.md](decisions.md) or in the owning spec.
+
+| ID | Question | Recommended default | PM rationale | Architect rationale | AI rationale | Related |
+| --- | --- | --- | --- | --- | --- | --- |
+| SDD-Q-1 | How does a developer run Redis locally for T-015? | A second throwaway container in its own compose file: fixed name `strativa-test-redis`, `127.0.0.1` only, no volumes. The agent never starts the Docker daemon. | One command like the DB suite | Same safety constraints as the DB container | None | T-015, T-013 |
+| SDD-Q-2 | Is the Neon test branch on the same PostgreSQL major version as the local image (`pgvector/pgvector:pg16`)? | Unknown. Owner states the version; CI and local pin to it. | Avoids false confidence from a different engine | Version differences affect extensions and planner behavior | pgvector behavior depends on version | T-013, ADR-0008 |
+| SDD-Q-3 | Does spec 10.1 or 20.4 already allow `verified` and a verification date on catalog entries? | Check at the T-018 prepare step; if not, write a spec change proposal first. | Keeps spec approval honest | Catalog fields are a contract | Loader refusal of unverified entries depends on it | T-018 |
+| SDD-Q-4 | Constraints on `instructions_version`: length, characters, logging, events? | Opaque label, 1 to 64 characters, letters, digits and `._:-`, allowed in logs and audit details, not in events yet. | Small, safe surface | Opaque label avoids content leakage | Needed to attribute quality to a prompt | T-019 |
+| SDD-Q-5 | Metric views: plain or materialized, time bucket, who reads them? | Plain views, day bucket (UTC), read through an `ai:usage_read` service method; system-wide view not exposed over HTTP. | No refresh job to run | Views stay inside `ai_platform` | Compares observed latency with the catalog value | T-020 |
+| SDD-Q-6 | Size and labeling protocol of a golden set? | Defined by each AI task spec; hand-labeled by the owner or a named delegate; synthetic text only (D-27); spend counted toward the 20 USD cap. | No made-up bar | Thresholds belong to the module that owns the output (D-6) | A set without labels is not evidence | [evals](evals/README.md), T-012 P-5 |
+| SDD-Q-7 | CI details: runner image, action SHAs, `uv` and Python version source? | `ubuntu-latest` pinned by version in the workflow, actions pinned by SHA, Python 3.12, `uv` pinned. Fork pull requests get no secrets. | Predictable runs | Reproducible lock-based installs | None | T-013 |
+| SDD-Q-8 | When are the `rag` and `context_engine` specs authored? | After T-011 is verified, so that `rag` can rely on the verified `ai_platform` surface and D-23, D-29. | Sequenced scope | Specs follow verified interfaces | `rag` consumes embeddings | phase-2 |
+| SDD-Q-9 | Is a per-phase page needed for phases 3 to 9 now? | No. Create each page at that phase's kickoff with `sdd-kickoff-phase`. | Avoids stale pages | None | None | [mvp-roadmap](product/mvp-roadmap.md) |
+| SDD-Q-10 | What exactly is "MVP" within the phase list? | No decision recorded. The roadmap does not guess; the owner states the MVP cut line when ready. | Scope risk is visible, not hidden | Sequencing follows dependencies in modules.md | None | [mvp-roadmap](product/mvp-roadmap.md) |
+
+Already tracked elsewhere (not repeated): D-32 (T-004), D-20 (T-005), the web_foundation spec (T-007), spec approval metadata (T-009), frontend scope (T-010).
