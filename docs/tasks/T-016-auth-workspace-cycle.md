@@ -1,7 +1,7 @@
 # T-016: auth and workspace dependency cycle (check, then fix)
 
 - **Module and phase:** auth, workspace, api_contract (composition root); Phase 1 and Phase 0
-- **State:** Proposed
+- **State:** In Progress (owner started 2026-11-20; step 0 and step 1 done; stopped for the owner review required after step 1; step 2 not started)
 - **Requirement IDs:** CORE-INV-11, WS-AC-7 (the boundary rules the check strengthens); AUTH-AC-2 and AUTH-AC-7 (must stay satisfied by the fix)
 - **Specification references:** [auth-onboarding](../specs/auth-onboarding/spec.md) (registration calls `WorkspaceService.create_workspace_for_owner(session, user_id, name)` in the caller-owned transaction; `/me` reads roles through the workspace public interface); [workspace](../specs/workspace/spec.md); [conformance report](../architecture/conformance-report.md) B-1 (corrected 2026-11-20); ADR-0003 (proposed)
 - **Dependencies:** A recorded baseline run of the auth and workspace DB tests before any change (step 0), from T-003 or from this task. T-013 preferred. Owner decisions of 2026-11-20: dependency inversion at the composition root; the protocol takes the caller's session or unit of work; the cycle check includes function-level imports; owner review between step 1 and step 2.
@@ -43,8 +43,27 @@ Before and after runs with exact commands, exit codes and counts. DB tests only 
 - No `app.auth` file imports `app.workspace`.
 - OpenAPI output is unchanged.
 
+## Step 1 record (2026-11-20)
+- `tests/helpers/import_graph.py`: package-level import graph from the AST (every `import` and `from ... import`, including inside functions, methods and `if TYPE_CHECKING`; relative imports resolved; `from app import x` counted) and a Tarjan cycle finder.
+- `tests/unit/architecture/test_package_import_cycles.py` (9 tests): the real-tree test with a visible `KNOWN_CYCLES` allowlist (auth and workspace; step 2 removes it; a stale entry also fails), edge-visibility, the exemption-soundness test, the "without the exemption" documentation test, and six seeded-fixture tests (module-level, function-level, method-level, three-node cycles, relative imports, acyclic graph with third-party imports).
+- `traceability.md`: the test is listed on CORE-INV-11 and WS-AC-7 (status unchanged, `Implemented`).
+
+## Finding that changes the premise of this task (owner decision needed)
+The task states one known cycle, auth and workspace. The AST graph shows a second source of cycles that the earlier analysis did not report: `app/db_migrations/alembic/env.py` imports the models of `ai_platform`, `auth`, `events_outbox`, `observability_audit`, `profile` and `workspace` (the Alembic metadata registry, ADR-0005), while each of those packages imports `app.db_migrations` for `Base`, `database_session` or `runtime_engine`. Counted as is, the whole graph is one strongly connected component of eight packages: ai_platform, auth, db_migrations, events_outbox, jobs_workers, observability_audit, profile, workspace. (jobs_workers joins through `workspace/jobs.py` importing it and `jobs_workers` importing `events_outbox`.)
+
+Excluding that single file leaves exactly one cycle, auth and workspace, matching the task. So step 1 as written needs a decision:
+- **Proposed (implemented, pending your review):** a second visible list, `REGISTRY_EXEMPT_FILES`, containing only `db_migrations/alembic/env.py`, with its rationale; a test that no file under `app/` imports `app.db_migrations.alembic` (so the exemption stays sound) and a test that without it the large cycle exists (so the exemption cannot go stale silently).
+- **Alternative:** keep the graph unexempted and treat `db_migrations` as a lower layer by moving the registry out of the package. That is an architecture change outside this task (ADR-0005), so I did not do it.
+- **Also noted:** the auth to workspace edge is a module-level import in `app/auth/routes.py` line 37, which `app/auth/__init__.py` loads lazily inside `register_routes`. The AST sees `routes.py`, so the lazy import does not hide the edge from this check. Step 2's inversion must cover `routes.py` and `service.py`, not only `__init__.py`.
+
 ## Evidence
-None recorded.
+**Step 0, baseline (2026-11-20)**
+- DB-free gate, run now: `env -u TEST_REDIS_URL uv run --python 3.12 --no-sync python scripts/check.py`, exit 0, ruff and mypy clean, pytest `-m "not db"`: 1707 passed, 4 skipped, 0 failed, 200 deselected. This includes the 9 new step 1 tests; the baseline before them was 1698 passed, 4 skipped (T-015 record). `TEST_REDIS_URL` was unset for this process only: the Redis container from T-015 was no longer running, and with the variable set the 4 Redis-only tests fail loudly by design.
+- Database suite baseline: not re-run for this task. Reused from [T-015 Run 2](T-015-real-redis-queue-outbox-tests.md#evidence): `bash scripts/run_db_suite.sh all`, exit 0, 200 passed, 0 failed, local Postgres. No file under `app/` has changed since (`git diff --stat 11f779f HEAD -- app` is empty), and the only test changes since are step 1's DB-free files. It includes `tests/db/test_auth_workspace.py` (13 tests), the AUTH-AC-2 and AUTH-AC-7 tests. A fresh `/run-db-suite all` baseline is available on request.
+
+**Step 1 test run:** `uv run --python 3.12 --no-sync python -m pytest tests/unit/architecture/test_package_import_cycles.py -q`: 9 passed.
+
+**NOT RUN:** step 2 (not started); the after-run comparison; the independent audit.
 
 ## Review and approval
-Not requested. **Gate: always** (auth behavior; contracts). Owner review after step 1 and after step 2.
+Plan started by the owner on 2026-11-20. **Gate: always** (auth behavior; contracts). Owner review after step 1: **requested now** (see the finding and the exemption decision). Owner review after step 2: not requested.
