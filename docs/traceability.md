@@ -244,7 +244,7 @@ This document defines the schema, the status vocabulary and the rules, and holds
 | AC-57 | ai_platform | [ai-platform](specs/ai-platform/spec.md) | 17.6 Acceptance criteria | unmapped (not implemented) | unmapped | None recorded | Specified | No `ai_live` suite. |
 | AC-58 | ai_platform | [ai-platform](specs/ai-platform/spec.md) | 17.5 Acceptance criteria | `app/ai_platform/budget_repository.py` (documented lock order, single-statement settle and abandon) | `tests/db/test_budget_repository.py::test_concurrent_settle_and_abandon_exactly_one_wins` (needs Postgres) | None recorded | Implemented | partial: one settle-versus-abandon race. No repeated iterations, fenced settlements or concurrent refusals, no deadlock assertion. |
 | AC-59 | ai_platform | [ai-platform](specs/ai-platform/spec.md) | 17.5 Acceptance criteria | `app/ai_platform/router.py::RoutedModel.estimated_cost_micro_usd` (Router side)<br>`app/ai_platform/budget_coordinator.py::BudgetCoordinator.reserve_for_call` (takes the estimate) | `tests/unit/ai_platform/test_router.py::test_one_estimate_serves_the_ceiling_the_budget_and_the_candidate` | None recorded | Implemented | partial: spec says "implemented with the orchestrator", which does not exist. Only the Router's single estimate and inclusive boundary are tested. No reservation-equals-estimate check. |
-| AC-60 | ai_platform | [ai-platform](specs/ai-platform/spec.md) | 17.5 Acceptance criteria | unmapped (not implemented) | unmapped | None recorded | Specified | `app/ai_platform/catalog.py` has the model schema and loader only. No committed catalog data, no per-task `required_min_input_units`, no fitness test. |
+| AC-60 | ai_platform | [ai-platform](specs/ai-platform/spec.md) | 17.5 Acceptance criteria | `app/ai_platform/catalog.py` (verification fields, `load_catalog(allow_unverified=False)`, `task_min_input_units`), `app/ai_platform/catalog_data/models.json` | `tests/unit/ai_platform/test_catalog_fitness.py`, `tests/unit/ai_platform/test_catalog_verification.py` | None recorded (DB-free run 2026-11-20 is in [the T-018 record](reports/2026-11-20-T-018-stop3-catalog-and-fitness.md); not accepted as Verified until owner review of the catalog values) | Implemented | Fitness table passes for the default cost ceilings. `task_min_input_units` values (other than EMBED_TEXT) and `latency_p50_ms` are owner-review proposals, not documented facts. |
 | AC-61 | ai_platform | [ai-platform](specs/ai-platform/spec.md) | 17.5 Acceptance criteria | `app/ai_platform/router.py::RoutedModel.effective_max_output_units`, `route`<br>`app/ai_platform/tasks.py::resolve_max_output_units` | `tests/unit/ai_platform/test_router.py::test_effective_max_output_units_is_the_clamped_value`, `::test_effective_max_output_units_is_none_for_embedding`, `::test_effective_max_output_units_is_the_context_fit_boundary`, `::test_output_units_are_clamped_to_each_models_own_maximum`, `::test_one_estimate_serves_the_ceiling_the_budget_and_the_candidate` | None recorded | Implemented | Router part only. The adapter part is not implemented and untested. |
 
 ## 6. Summary (counts as of this matrix)
@@ -257,8 +257,8 @@ This document defines the schema, the status vocabulary and the rules, and holds
 | Rows with an implementation reference (full or partial) | 166 |
 | Rows with a test reference (full or partial) | 157 |
 | Verified | 11 |
-| Implemented | 141 |
-| Specified | 26 |
+| Implemented | 142 |
+| Specified | 25 |
 | Gap | 14 |
 | Blocked | 1 |
 

@@ -1,7 +1,7 @@
 # T-018: Model catalog verification from official documentation
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** In Progress (plan approved 2026-11-20; CP-1 approved with Option A; stop 2 facts recorded, awaiting owner review before stop 3)
+- **State:** Implemented (stops 1 to 3 done 2026-11-20; DB-free gate green; awaiting owner result review of the catalog values and a manual `/run-db-suite all`)
 - **Requirement IDs:** AC-60 (catalog fitness; currently `Specified`). Context: D-21, D-22, D-26, D-27, D-28 and spec section 20.4.
 - **Specification references:** [AI Platform spec](../specs/ai-platform/spec.md) sections 9, 10.1, 12.2, 17.4 (AC-60), 20.3, 20.4; [conformance report](../architecture/conformance-report.md) F-1
 - **Dependencies:** T-017 (LiteLLM installed, for the LiteLLM identifier checks). Owner approval of the catalog format. Web access to official documentation. No provider API call is made, so the spend cap (D-11, D-16) is not touched and D-27 is not engaged.
@@ -41,3 +41,5 @@ A record (T-014 format) with the list of fetched URLs and dates, the verified fa
 
 ## Review and approval
 Not requested. **Gate: always** (AI targets; possible contract change).
+- 2026-11-20 owner decisions on the stop 2 findings: keep `gemini-3.8-flash`; enter today's price; keep Perplexity v1; Perplexity stays embeddings-only and Gemini stays the chat provider (no Perplexity chat model).
+- 2026-11-20 stop 3: spec revision 8 applied (CP-1); catalog file `app/ai_platform/catalog_data/models.json`; loader refusal and strict fields; AC-60 fitness test. Record with commands, counts and the printed table: [stop 3 record](../reports/2026-11-20-T-018-stop3-catalog-and-fitness.md) (check.py 1730 passed, 4 skipped; 67 catalog tests passed). AC-60 is `Implemented`, not `Verified`; the open items to review are listed in that record.

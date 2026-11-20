@@ -30,6 +30,8 @@ def chat_entry(**overrides: Any) -> dict[str, Any]:
         "output_micro_usd_per_million_units": 600_000,
         "price_source_url": "https://example.test/pricing",
         "price_checked_on": "2026-01-15",
+        "verified": True,
+        "verified_on": "2026-01-15",
     }
     entry.update(overrides)
     return entry
@@ -51,6 +53,8 @@ def embed_entry(**overrides: Any) -> dict[str, Any]:
         "output_micro_usd_per_million_units": 0,
         "price_source_url": "https://example.test/pricing",
         "price_checked_on": "2026-01-15",
+        "verified": True,
+        "verified_on": "2026-01-15",
     }
     entry.update(overrides)
     return entry

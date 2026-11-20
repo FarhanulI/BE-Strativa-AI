@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
@@ -23,7 +23,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.ai_platform.enums import AiCapability, AiModality, QualityClass
+from app.ai_platform.enums import AiCapability, AiModality, AiTaskName, QualityClass
 from app.core import ConfigurationError
 
 _PROVIDER_PATTERN = r"^[a-z][a-z0-9_-]*$"
@@ -31,6 +31,7 @@ _PROVIDER_PATTERN = r"^[a-z][a-z0-9_-]*$"
 _INVALID_MESSAGE = "Invalid AI model catalog; offending fields: "
 _UNREADABLE_MESSAGE = "The AI model catalog file could not be read"
 _NOT_JSON_MESSAGE = "The AI model catalog file is not valid JSON"
+_UNVERIFIED_MESSAGE = "AI model catalog has unverified entries; offending fields: "
 
 _RULE_PREFIX = "Value error, "
 
@@ -55,6 +56,9 @@ class CatalogModel(BaseModel):
     output_micro_usd_per_million_units: int = Field(ge=0, strict=True)
     price_source_url: str
     price_checked_on: date
+    # Rev 8 (CP-1): true only when every fact was read from the cited official source.
+    verified: bool = Field(strict=True)
+    verified_on: date
 
     @field_validator("model")
     @classmethod
@@ -70,7 +74,7 @@ class CatalogModel(BaseModel):
             raise ValueError("")
         return value
 
-    @field_validator("price_checked_on", mode="before")
+    @field_validator("price_checked_on", "verified_on", mode="before")
     @classmethod
     def _date_not_timestamp(cls, value: Any) -> Any:
         # A date or an ISO string only: lax date parsing would also accept numbers and datetimes.
@@ -105,6 +109,10 @@ class ModelCatalog(BaseModel):
     catalog_version: str = Field(min_length=1)
     price_version: str = Field(min_length=1)
     entries: tuple[CatalogModel, ...] = Field(validation_alias="models")
+    # AC-60 (rev 8): the minimum input units each task needs; catalog configuration.
+    task_min_input_units: dict[AiTaskName, Annotated[int, Field(gt=0, strict=True)]] = Field(
+        default_factory=dict
+    )
 
     @field_validator("catalog_version", "price_version")
     @classmethod
@@ -146,8 +154,12 @@ class ModelCatalog(BaseModel):
         return tuple(entry for entry in self.entries if entry.enabled)
 
 
-def load_catalog(path: Path) -> ModelCatalog:
-    """Read and validate a catalog JSON file (standard-library ``json``, no new dependency)."""
+def load_catalog(path: Path, *, allow_unverified: bool = False) -> ModelCatalog:
+    """Read and validate a catalog JSON file (standard-library ``json``, no new dependency).
+
+    Any entry with ``verified: false`` is refused unless ``allow_unverified`` is set, which only
+    tests do (spec 10.1, rev 8). The message names field paths, never model content.
+    """
     try:
         text = Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -156,7 +168,16 @@ def load_catalog(path: Path) -> ModelCatalog:
         data = json.loads(text)
     except ValueError:
         raise ConfigurationError(_NOT_JSON_MESSAGE) from None
-    return ModelCatalog.from_dict(data)
+    catalog = ModelCatalog.from_dict(data)
+    if not allow_unverified:
+        unverified = [
+            f"models.{index}.verified"
+            for index, entry in enumerate(catalog.entries)
+            if not entry.verified
+        ]
+        if unverified:
+            raise ConfigurationError(_UNVERIFIED_MESSAGE + ", ".join(unverified))
+    return catalog
 
 
 def _field_paths(error: ValidationError) -> str:
