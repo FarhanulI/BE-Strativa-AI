@@ -17,8 +17,20 @@ A task is a bounded, owner-approved unit of work. The process, lifecycle and rul
 | [T-009](T-009-nine-spec-approval-metadata.md) | Approval metadata for the nine non-AI-Platform specs | Phase 0 and 1 modules | Blocked | Owner confirmation |
 | [T-010](T-010-frontend-scope-questions.md) | Frontend normative scope and spec cleanup questions | auth, profile / 1 | Blocked | Owner decision; frontend scope |
 | [T-011](T-011-ai-platform-sync-run-path.md) | AI Platform synchronous `run` path (fake provider) | ai_platform / 2 | Proposed | Owner approval; SDD-D-7 accepted; rev 5-7 approved (T-006, 2026-11-19) |
+| [T-012](T-012-sdd-process-amendment.md) | SDD process amendment: risk-tiered gates, evidence reporting, independent audit, safety tiers, eval gate (SDD-D-8) | SDD process | Proposed | Owner approval. SDD-D-4 stays in force until approved |
+| [T-013](T-013-ci-with-database-tests.md) | CI with database tests (verification infrastructure for T-002 and T-003; adds no product behavior) | none (serves Phases 0 and 1) | Proposed | T-002 first; T-012 approved |
+| [T-014](T-014-traceability-evidence-format.md) | Traceability evidence format (report template, linked Evidence cell, `NOT RUN`) | SDD process support | Proposed | T-012 approved |
+| [T-015](T-015-real-redis-queue-outbox-tests.md) | Real-Redis queue, outbox relay, lease and correlation tests | jobs_workers, events_outbox, observability_audit / 0 | Proposed | Real Redis; T-013 for CI. T-002 JOB rows wait for it |
+| [T-016](T-016-auth-workspace-cycle.md) | auth and workspace cycle: cycle check (incl. function-level imports), then fix by composition-root inversion | auth, workspace, api_contract / 1 | Proposed | Baseline run first; owner review between steps 1 and 2 |
+| [T-017](T-017-litellm-dependency.md) | Add and pin the LiteLLM dependency (always-stop) | ai_platform / 2 | Proposed | T-013; owner approval at each of three stops |
+| [T-018](T-018-model-catalog-verification.md) | Model catalog verification from official documentation; catalog file and loader refusal of unverified entries | ai_platform / 2 | Proposed | T-017; possible spec change proposal for the `verified` fields |
+| [T-019](T-019-instructions-version.md) | `instructions_version` on AI requests: proposal, then nullable migration | ai_platform / 2 | Proposed | Owner approval; must be settled before T-011 starts |
+| [T-020](T-020-ai-metric-views.md) | DB-derived AI metric views (p50/p95 latency, cost, error rate by provider, model, `instructions_version`) | ai_platform / 2 | Proposed | T-019 |
+| [T-021](T-021-generated-data-model.md) | Generated `data-model.md` and drift gate | db_migrations / 0 | Proposed | T-013 |
 
-No task exists for a module that has no specification.
+No task exists for a module that has no specification. Exception recorded for T-013: it is verification infrastructure for T-002 and T-003 and does not implement the `delivery` module.
+
+**Hardening milestone order (Phase 2, owner-confirmed 2026-11-20):** T-012 (review only), T-002, T-013, T-014, T-015, T-016, T-017, T-018, T-001 (Neon, separately authorized; first run is the nightly CI job), T-019 (settled before T-011), T-011 and T-008, then T-020 and T-021. See [phase-2](../phases/phase-2/README.md).
 
 ## Template
 
