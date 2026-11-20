@@ -38,7 +38,7 @@ JOB-AC-2, OUT-AC-3 and OBS-AC-3 each have a mapped, executed test with dated evi
 - `tests/redis_integration/test_job_queue_redis.py` (JOB-AC-2, 4 tests, `redis`): enqueue/claim/ack; redelivery after consumer failure (`XCLAIM IDLE` ages one message, no sleep); retry with backoff then success; dead-letter after exhaustion (delays 2, 4, 8, then the dead-letter entry).
 - `tests/db/test_outbox_relay_redis.py` (OUT-AC-3 two tests, OBS-AC-3 one test, `db` and `redis`): correlation metadata reaches the stream; bounded backoff driven by a real Redis WRONGTYPE refusal (delays 2 to 256, capped below 300), then publication; one request ID across outbox, relay, worker and audit.
 - `tests/db/test_outbox_lease_reclaim.py` (OUT-AC-2 clause, `db` only): committed live lease is not claimable, expired lease is reclaimed by another relay.
-- `tests/unit/jobs_workers/test_redis_test_target.py`: DB-free tests of the helper (13 cases).
+- `tests/unit/jobs_workers/test_redis_test_target.py`: DB-free tests of the helper (14 cases).
 - `docs/traceability.md`: test references added for JOB-AC-2, OUT-AC-3, OBS-AC-3 and OUT-AC-2; JOB-AC-2 and OUT-AC-3 moved `Gap` to `Implemented`; OBS-AC-3 stays `Gap`; none `Verified`.
 
 ## Finding (stop-and-report item, not fixed here)
@@ -46,7 +46,7 @@ API route handlers that publish events do not put a request ID into the outbox m
 
 ## Evidence
 **Local DB-free gate, 2026-11-20** (branch `feat/Ai-platform`, uncommitted changes at the time of the run)
-- Command: `uv run --python 3.12 --no-sync python scripts/check.py`. Exit code 0. Local Windows, Python 3.12.14. ruff clean; mypy clean; pytest `-m "not db"`: 1698 passed, 4 skipped, 0 failed, 200 deselected. The 4 skipped are the Redis-only job queue tests, skipped because `TEST_REDIS_URL` is not set. The 13 helper tests ran and passed.
+- Command: `uv run --python 3.12 --no-sync python scripts/check.py`. Exit code 0. Local Windows, Python 3.12.14. ruff clean; mypy clean; pytest `-m "not db"`: 1698 passed, 4 skipped, 0 failed, 200 deselected. The 4 skipped are the Redis-only job queue tests, skipped because `TEST_REDIS_URL` is not set. The 14 helper tests ran and passed (1684 to 1698 passed).
 - Collection: the 8 new integration tests collect (`pytest --collect-only`): 4 in `tests/redis_integration`, 3 in `test_outbox_relay_redis.py`, 1 in `test_outbox_lease_reclaim.py`.
 
 **NOT RUN:** the 4 Redis-only tests; the 3 `db`+`redis` tests; the lease reclaim test; the local database suite; the CI run (T-013 is deferred). Reasons: no Redis available to the agent (no `TEST_REDIS_URL`), and the database suite is run by the owner through `/run-db-suite`. No requirement is `Verified` by this task.
