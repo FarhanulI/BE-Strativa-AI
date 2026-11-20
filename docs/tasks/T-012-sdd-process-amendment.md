@@ -1,7 +1,7 @@
 # T-012: SDD process amendment (change proposal, documentation only)
 
 - **Module and phase:** Not applicable (SDD process); applies to every phase
-- **State:** Implemented (owner approved P-1 to P-6 as drafted on 2026-11-20; awaiting acceptance)
+- **State:** Accepted (owner approved P-1 to P-6 as drafted and accepted the result on 2026-11-20)
 - **Requirement IDs:** None. This task changes process documents, not a module specification. It supersedes SDD-D-4 in part through a new decision, SDD-D-8, following [sdd.md](../sdd.md) section 7.
 - **Specification references:** [sdd.md](../sdd.md) sections 4 to 8; [decisions.md](../decisions.md) SDD-D-4; [.github/copilot-instructions.md](../../.github/copilot-instructions.md) rules 1 to 17; [conformance report](../architecture/conformance-report.md)
 - **Dependencies:** Owner approval. **SDD-D-4 stays in force until the owner approves this task.** Nothing below is applied to `sdd.md`, `copilot-instructions.md` or `decisions.md` before that approval.
@@ -77,4 +77,4 @@ None (documentation). `sdd-close-milestone` checks run after the edit.
 - 2026-11-20, local, ad-hoc relative-link check over the 6 changed markdown files (`python check_links.py`, a scratchpad script that is not in the repo): exit 0, 94 links checked, 0 broken; `.claude/settings.json` parsed as valid JSON. This is not a `sdd-close-milestone` run: `sdd-close-milestone` is NOT RUN.
 
 ## Review and approval
-Plan and wording approved by the owner on 2026-11-20. **Gate: always** (governance). Result review and acceptance: pending. Independent audit (section 11): NOT RUN.
+Plan and wording approved by the owner on 2026-11-20. **Gate: always** (governance). Owner accepted the result on 2026-11-20. Independent audit (section 11): NOT RUN (the owner chose to proceed without it).

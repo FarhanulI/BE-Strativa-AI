@@ -7,7 +7,7 @@ A task is a bounded, owner-approved unit of work. The process, lifecycle and rul
 | Task | Title | Module / phase | State | Blocker or dependency |
 | --- | --- | --- | --- | --- |
 | [T-001](T-001-workspace-neon-concurrency.md) | Workspace Neon TEST-branch concurrency verification | workspace / 1 | Blocked | Separate explicit owner authorization to run on Neon (SDD-D-2) |
-| [T-002](T-002-phase0-reverification.md) | Phase 0 re-verification | Phase 0 modules / 0 | Ready | Approved 2026-11-20. Real Redis rows wait for T-015; Neon only under separate authorization |
+| [T-002](T-002-phase0-reverification.md) | Phase 0 re-verification | Phase 0 modules / 0 | In Progress | Approved 2026-11-20. Real Redis rows wait for T-015; Neon only under separate authorization |
 | [T-003](T-003-phase1-retrospective-verification.md) | Phase 1 retrospective verification gaps | auth, workspace, profile / 1 | Proposed | T-001 for WS-AC-3; owner approval |
 | [T-004](T-004-d32-owner-resolution.md) | D-32 owner resolution | ai_platform / 2 | Blocked | Owner decision |
 | [T-005](T-005-d20-revision-metadata.md) | D-20 revision metadata investigation | ai_platform / 2 | Blocked | New evidence (history) not available |
@@ -17,7 +17,7 @@ A task is a bounded, owner-approved unit of work. The process, lifecycle and rul
 | [T-009](T-009-nine-spec-approval-metadata.md) | Approval metadata for the nine non-AI-Platform specs | Phase 0 and 1 modules | Blocked | Owner confirmation |
 | [T-010](T-010-frontend-scope-questions.md) | Frontend normative scope and spec cleanup questions | auth, profile / 1 | Blocked | Owner decision; frontend scope |
 | [T-011](T-011-ai-platform-sync-run-path.md) | AI Platform synchronous `run` path (fake provider) | ai_platform / 2 | Proposed | Owner approval; SDD-D-7 accepted; rev 5-7 approved (T-006, 2026-11-19) |
-| [T-012](T-012-sdd-process-amendment.md) | SDD process amendment: risk-tiered gates, evidence reporting, independent audit, safety tiers, eval gate (SDD-D-8) | SDD process | Implemented | Approved 2026-11-20 and applied; awaiting acceptance. SDD-D-8 supersedes SDD-D-4 in part |
+| [T-012](T-012-sdd-process-amendment.md) | SDD process amendment: risk-tiered gates, evidence reporting, independent audit, safety tiers, eval gate (SDD-D-8) | SDD process | Accepted | Accepted 2026-11-20. SDD-D-8 supersedes SDD-D-4 in part |
 | [T-013](T-013-ci-with-database-tests.md) | CI with database tests (verification infrastructure for T-002 and T-003; adds no product behavior) | none (serves Phases 0 and 1) | Proposed | T-002 first; T-012 approved |
 | [T-014](T-014-traceability-evidence-format.md) | Traceability evidence format (report template, linked Evidence cell, `NOT RUN`) | SDD process support | Proposed | T-012 approved |
 | [T-015](T-015-real-redis-queue-outbox-tests.md) | Real-Redis queue, outbox relay, lease and correlation tests | jobs_workers, events_outbox, observability_audit / 0 | Proposed | Real Redis; T-013 for CI. T-002 JOB rows wait for it |
