@@ -1,7 +1,7 @@
 # T-017: Add and pin the LiteLLM dependency
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** In Progress (owner started 2026-11-20; stop 1 proposal presented; waiting for the owner to choose the version and approve stop 2)
+- **State:** In Progress (stop 1 approved 2026-11-20 with `litellm==1.109.1`; stop 2 done; waiting for the owner to review the lock diff and approve stop 3)
 - **Requirement IDs:** INV-1 and AC-1 (provider SDK imports confined to `app/ai_platform/`). This task is a prerequisite for the adapter and does not change their status.
 - **Specification references:** [AI Platform spec](../specs/ai-platform/spec.md) section 1 (provider abstraction through LiteLLM), INV-1, AC-1, D-21, D-22, section 20.4; [conformance report](../architecture/conformance-report.md) F-4
 - **Dependencies:** T-013 (CI) so that the lock change is tested on a clean install. Owner approval at each stop below. **Always-stop gate: this task never proceeds from one stop to the next without the owner.**
@@ -53,8 +53,16 @@ Sources fetched in the session: PyPI JSON (`https://pypi.org/pypi/litellm/json`,
 
 **Decision requested (stop 2 approval):** the exact version. Proposed `litellm==1.109.1`; fallback `litellm==1.108.7`.
 
+## Stop 2 record (2026-11-20)
+The owner approved `litellm==1.109.1` (proposed version, not the fallback).
+- Edit: `pyproject.toml` gains one line, `"litellm==1.109.1",`, in `[project] dependencies` (alphabetical position after `fastapi`). No other line changed.
+- Command: `uv lock --python 3.12`. Exit code 0. "Resolved 96 packages in 93ms".
+- Lock diff (`git diff --stat`): `pyproject.toml` 1 insertion; `uv.lock` 1593 insertions, 3 deletions. The 3 deleted lines are the old `certifi` entry (version, sdist, wheel). Added packages: 44, identical to the stop 1 dry-run: aiohappyeyeballs, aiohttp, aiosignal, attrs, boto3, botocore, charset-normalizer, fastuuid, filelock, frozenlist, fsspec, h2, hf-xet, hpack, httpcore2, httpx2, httpx2-jsfetch, huggingface-hub, hyperframe, importlib-metadata, jinja2, jiter, jmespath, jsonschema, jsonschema-specifications, litellm 1.109.1, multidict, openai 3.57.0, propcache, python-dateutil, referencing, regex, requests, rpds-py, s3transfer, six, sniffio, tiktoken, tokenizers, tqdm, truststore, urllib3, yarl, zipp. Changed: `certifi` v2026.7.22 to v2026.10.23. No other existing package changed version.
+- The lock's project entry carries `{ name = "litellm", specifier = "==1.109.1" }`.
+- `uv sync` was not run: the local virtual environment is unchanged. Stop 3 runs the clean-install check.
+
 ## Evidence
-None recorded for stops 2 and 3 yet. Stop 1 evidence is the section above.
+Stops 1 and 2 are recorded above. Stop 3 (DB-free suite, architecture tests, clean `uv sync --locked`): NOT RUN yet.
 
 ## Review and approval
-Stop 1 presented 2026-11-20; waiting for the owner's version decision. **Gate: always** (dependency). The owner must approve each of the three stops.
+Stop 1 approved 2026-11-20; stop 2 done; waiting for the owner's lock-diff review and approval of stop 3. **Gate: always** (dependency). The owner must approve each of the three stops.
