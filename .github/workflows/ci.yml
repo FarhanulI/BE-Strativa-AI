@@ -1,0 +1,79 @@
+# T-013: verification infrastructure. Runs the same commands as local development.
+# No secrets are referenced, so pull requests from forks run without any.
+# Actions are pinned to full commit SHAs (version in the comment). Do not use pull_request_target.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, "feat/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1"
+  UV_PYTHON: "3.12"
+
+jobs:
+  checks:
+    name: Lint, types and DB-free tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.5"
+          enable-cache: false
+      - name: Install dependencies
+        run: uv sync
+      - name: ruff, mypy and pytest -m "not db" (scripts/check.py)
+        run: uv run python scripts/check.py
+
+  database:
+    name: Database suite (local throwaway Postgres) and Redis service
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      redis:
+        # Tag only: the image digest has not been verified (T-013 records this).
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.5"
+          enable-cache: false
+      - name: Install dependencies
+        run: uv sync
+      - name: Generate a throwaway database password for this job
+        # Not a repository or organization secret. Masked in the log. The URLs use the
+        # loopback address and a database name ending in _test, which the guard requires.
+        run: |
+          pw="$(openssl rand -hex 24)"
+          echo "::add-mask::${pw}"
+          {
+            echo "TEST_DB_PASSWORD=${pw}"
+            echo "DATABASE_URL=postgresql+asyncpg://app_test:${pw}@127.0.0.1:55444/strativa_test"
+            echo "DATABASE_URL_DIRECT=postgresql+asyncpg://app_test:${pw}@127.0.0.1:55444/strativa_test"
+            echo "TEST_DB_MODE=local"
+            echo "APP_ENV=test"
+          } >> "$GITHUB_ENV"
+      - name: Database suite (scripts/run_db_suite.sh all)
+        run: bash scripts/run_db_suite.sh all

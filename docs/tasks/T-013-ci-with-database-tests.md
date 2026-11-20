@@ -1,7 +1,7 @@
 # T-013: CI with database tests (verification infrastructure)
 
 - **Module and phase:** None of its own. Verification infrastructure that serves T-002 (Phase 0) and T-003 (Phase 1). It is not the `delivery` module (Phase 9, no specification).
-- **State:** Proposed
+- **State:** In Progress (owner started 2026-11-20 after accepting T-002; plan decisions below)
 - **Requirement IDs:** None: dependency on T-002 and T-003. The task executes tests already mapped in [traceability.md](../traceability.md); it adds no product behavior and satisfies no requirement by itself.
 - **Specification references:** [conformance report](../architecture/conformance-report.md) findings E-1, C-1; [README Test database modes](../../README.md); DBM-AC-4 (the fixture and guard are used unchanged)
 - **Dependencies:** T-002 approved first. T-012 approved (gates, safety tiers). For fork pull requests, no secrets are used.
@@ -35,8 +35,18 @@ A recorded CI run on a pull request from a branch of this repository: run URL, d
 - All actions are pinned by SHA.
 - The recorded run shows counts that match the local `/run-db-suite` counts for the same commit, or the difference is explained.
 
+## Preparation decisions (2026-11-20)
+- **Safety check form:** a DB-free test, `tests/unit/architecture/test_ci_workflow_safety.py`: no `secrets.`, `pull_request_target`, `workflow_run` or explicit token reference; every `uses:` pinned to a 40-hex SHA; top-level `permissions: contents: read`; no Neon or real-provider names.
+- **Actions pinned (full SHA, checked against the official repositories with `git ls-remote --tags` on 2026-11-20):** `actions/checkout` v7.0.1 = `3d3c42e5aac5ba805825da76410c181273ba90b1`; `astral-sh/setup-uv` v10.3.3 = `68559e99cc807c1eb7e9238fd43a15bba460eec2`. Both tags are lightweight, so the tag target is the commit. I did not read the action source code. Python comes from `uv` (`UV_PYTHON=3.12`), so `actions/setup-python` is not used. `uv` is pinned to 0.12.5, the version of the local runs.
+- **Redis image:** `redis:7.4-alpine` by tag only. The digest was not verified. The service exists for T-015; no test reads it yet, and `REDIS_URL` is deliberately not exported, so existing tests are unchanged.
+- **Divergences from local commands:** (1) `uv sync` with `UV_FROZEN=1` and `uv run python scripts/check.py`, instead of `--no-sync`, because the CI environment is fresh; (2) the database URLs come from the process environment, because the local ones live in the git-ignored `.env.test.docker.local`, which CI does not have. The password is generated per job, masked and not a secret. The guard, `run_db_suite.sh` and `compose.test-db.yaml` are unchanged.
+- **Postgres major version:** the same image as local (`pgvector/pgvector:pg16`, through the compose file). Whether the Neon test branch has the same major version stays SDD-Q-2.
+
 ## Evidence
-None recorded.
+**Local, 2026-11-20** (before the first CI run)
+- Command: `uv run --python 3.12 --no-sync python scripts/check.py`. Exit code 0. Local Windows, Python 3.12.14. ruff clean; mypy clean; pytest `-m "not db"`: 1684 passed, 0 failed, 196 deselected (5 new tests in `test_ci_workflow_safety.py`).
+- The workflow YAML parses (`yaml.safe_load`): jobs `checks` and `database`, triggers `pull_request` and `push`.
+- **GitHub Actions run: NOT RUN yet.** It starts when this commit is pushed. The run URL, job results and counts are recorded below once read. A deliberately failing change to confirm a red job: NOT RUN.
 
 ## Review and approval
-Not requested. **Gate: always** (dependencies: CI actions). Plan approval required.
+Plan started by the owner on 2026-11-20. **Gate: always** (dependencies: CI actions). Result review required before T-014 starts. Independent audit (sdd.md section 11): NOT RUN.

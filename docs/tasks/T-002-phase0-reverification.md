@@ -1,7 +1,7 @@
 # T-002: Phase 0 re-verification
 
 - **Module and phase:** core, events_outbox, jobs_workers, observability_audit, db_migrations, api_contract; Phase 0
-- **State:** Implemented (owner approved 2026-11-20; runs and row audit recorded 2026-11-20; 8 of 56 rows `Verified`; awaiting owner review)
+- **State:** Accepted (owner accepted 2026-11-20; 8 of 56 rows `Verified`)
 - **Requirement IDs:** CORE-INV-1..11, CORE-AC-1..11, OUT-INV-1..4, OUT-AC-1..3, JOB-INV-1..4, JOB-AC-1..3, OBS-INV-1..3, OBS-AC-1..3, DBM-INV-1..4, DBM-AC-1..4, API-INV-1..3, API-AC-1..3
 - **Specification references:** The six Phase 0 specs under [docs/specs/](../specs/); [Phase 0 verification report](../reports/phase0-verification.md)
 - **Dependencies:** Owner approval. A real Redis instance for worker tests. Any Neon execution requires a separate authorization (see T-001). Local DB tests run only through `/run-db-suite`.
