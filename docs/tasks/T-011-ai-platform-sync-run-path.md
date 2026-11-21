@@ -1,7 +1,7 @@
 # T-011: AI Platform synchronous `run` path (fake provider)
 
 - **Module and phase:** ai_platform, Phase 2 (sub-task of T-008, part (b))
-- **State:** Proposed
+- **State:** In Progress (plan approved by the owner with "start step 1", 2026-11-21)
 - **Requirement IDs:** (all exist in the spec and the traceability matrix; coverage is limited to the `run` path unless stated. Completing the `run` clause of a criterion does not make the whole criterion verified.)
   - Invariants: INV-4 (`run` path only; the `execute_request` and `embed_texts` paths stay open), INV-6, INV-7, INV-8, INV-9, INV-23, INV-24, INV-26, INV-29 (`run` path only).
   - Acceptance criteria:
@@ -34,6 +34,13 @@
   - Existing components used and not changed: Router (`router.py`), failure policy, output validation (`validation.py`), message builder (`messages.py`), circuit breaker, fake provider, `BudgetCoordinator`, request and budget repositories, task and schema registries.
   - Local Postgres test container, run only through `/run-db-suite`. No Neon.
 
+## Plan update, 2026-11-21 (owner start of step 1)
+- Spec line anchors above predate revisions 8 and 9 (T-018, T-019) and are approximate; the section numbers are authoritative.
+- `run` passes `request.instructions_version` to `insert_sync_request` (T-019, D-36). Steps 2 and 3 assert it is stored. The same-key, different-label `Conflict` stays with `submit` and is not in this task.
+- No migration or schema change is needed; the "stop on schema change" rule still holds.
+- Judgment calls in step 1 (owner to confirm): a disallowed scope raises core `ValidationFailed` with the fixed detail `This AI task is not available for this call scope`, because the spec names no error class for it; an omitted `output_schema_version` resolves to the task definition's `default_output_schema_version`.
+- Split (steps 7 to 10 as a follow-up task) and the fresh-context audit before `Verified` are still open owner decisions; the work continues with all ten steps and a stop after each.
+
 ## Objective
 Add the `AiOrchestrator.run` implementation that ties the existing, individually tested parts into one request flow: validate, create the `ai_requests` row, route, reserve, call a `ProviderClient`, validate output (with the repair call), fall back, settle and finish the row. Close the `run` clauses of the requirements above that are `Specified` or partial only because no orchestrator exists. Use the fake provider only.
 
@@ -55,7 +62,7 @@ Add the `AiOrchestrator.run` implementation that ties the existing, individually
 - The LiteLLM adapter and any real provider call (AC-54 to AC-57; INV-1 stays `Specified`).
 - `submit`, `get_status`, `get_output`, `execute_request`, leases, heartbeats, the reaper, purge, reconcile jobs and the cron CLI (AC-39 to AC-50, INV-16, INV-17, INV-25, INV-28).
 - `embed_texts` (AC-8 embedding part, INV-12).
-- HTTP endpoints, UI, catalog data and prices (AC-60), any change to the specification, requirements or decisions.
+- HTTP endpoints, UI, the real catalog file wiring (the catalog data and AC-60 were done in T-018; `run` is tested with the synthetic catalog), any change to the specification, requirements or decisions.
 - Any change to migrations or the schema. If one is needed, stop and write a change proposal.
 - Changes to the Router, failure policy, message builder, breaker or `BudgetCoordinator`. If a defect is found, stop and report.
 - Resolving D-32 or D-20 (T-004, T-005). Neon runs. Real-provider spend.
@@ -95,7 +102,7 @@ Boundaries: product code only under `app/ai_platform/`. Persistence stays inside
 - Traceability updated for: INV-4 (`run`), INV-6, INV-7, INV-8, INV-9, INV-23, INV-24, INV-26, INV-29 (`run`), AC-9 (`run`), AC-15 to AC-19, AC-22 to AC-29, AC-38 (`run`), AC-51, AC-59. AC-36, AC-58, INV-13 and INV-32 keep their status.
 
 ## Evidence
-None recorded.
+- **Step 1 (2026-11-21):** `env -u TEST_REDIS_URL uv run python scripts/check.py` exit 0, 1781 passed, 0 failed, 4 skipped (redis), 217 deselected (db). Local Windows, DB-free. New: `app/ai_platform/orchestrator.py`, `tests/unit/ai_platform/test_orchestrator_validation.py` (19 tests). Two existing export-list tests were extended with `AiOrchestrator`. No requirement status changes yet (traceability is step 10).
 
 ## Review and approval
 Not requested. Owner approval is recorded elsewhere only for the spec revisions (T-006, 2026-11-19), not for this task.

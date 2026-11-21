@@ -30,6 +30,7 @@ from app.ai_platform.errors import (
     AiTaskNotReady,
 )
 from app.ai_platform.fake_provider import FakeAiProvider, ScriptedResponse
+from app.ai_platform.orchestrator import AiOrchestrator
 from app.ai_platform.requests import (
     AiContextBlock,
     AiPart,
@@ -59,6 +60,7 @@ __all__ = [
     "AiModality",
     "AiModalityNotSupported",
     "AiNoRoute",
+    "AiOrchestrator",
     "AiOutputInvalid",
     "AiPart",
     "AiPlatformConfig",

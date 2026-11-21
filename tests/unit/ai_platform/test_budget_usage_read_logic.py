@@ -194,6 +194,7 @@ def test_new_names_are_exported_and_the_old_ones_are_unchanged() -> None:
     added = {
         "AiCallContext", "AiBudgetService", "AiUsageService", "AiBudgetStatus", "AiUsageReport",
         "AiUsageSummary", "FakeAiProvider", "ScriptedResponse", "AiTaskResult", "AiRequestStatus",
+        "AiOrchestrator",
     }  # fmt: skip
     assert set(ai_platform.__all__) == previous | added
     assert len(ai_platform.__all__) == len(set(ai_platform.__all__))

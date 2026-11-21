@@ -451,7 +451,7 @@ def test_package_root_exports() -> None:
             "TaskScope", "TextPart", "VideoPart",
             "AiCallContext", "AiBudgetStatus", "AiUsageReport", "AiUsageSummary",
             "AiBudgetService", "AiUsageService",
-            "FakeAiProvider", "ScriptedResponse",
+            "FakeAiProvider", "ScriptedResponse", "AiOrchestrator",
             "AiTaskResult", "AiRequestStatus",
         ]
     )  # fmt: skip
