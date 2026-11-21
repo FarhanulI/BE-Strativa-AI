@@ -27,6 +27,11 @@ from app.core import SystemClock, UUID7Factory
 from app.db_migrations import TENANT_SCOPED, Base
 
 SCOPE_WORKSPACE_RULE = "(scope = 'workspace') = (workspace_id IS NOT NULL)"
+# Same rule as ``validate_instructions_version`` in requests.py (D-36).
+INSTRUCTIONS_VERSION_RULE = (
+    "instructions_version IS NULL OR (char_length(instructions_version) BETWEEN 1 AND 64 "
+    "AND instructions_version ~ '^[A-Za-z0-9._:-]+$')"
+)
 
 
 def _new_id() -> UUID:
@@ -73,6 +78,7 @@ class AiRequest(Base):
             "content_purged_at IS NULL OR (input_payload IS NULL AND output_payload IS NULL)",
             name="purged",
         ),
+        CheckConstraint(INSTRUCTIONS_VERSION_RULE, name="instructions_version"),
         Index(
             "uq_ai_requests_workspace_idempotency",
             "workspace_id",
@@ -125,6 +131,7 @@ class AiRequest(Base):
     task: Mapped[str] = mapped_column(Text, nullable=False)
     output_schema_name: Mapped[str | None] = mapped_column(Text)
     output_schema_version: Mapped[int | None] = mapped_column(Integer)
+    instructions_version: Mapped[str | None] = mapped_column(Text)
     mode: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     idempotency_key: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
@@ -136,9 +143,7 @@ class AiRequest(Base):
     attempt_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    lease_epoch: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
+    lease_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     lease_owner: Mapped[str | None] = mapped_column(Text)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

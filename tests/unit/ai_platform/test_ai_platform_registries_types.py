@@ -505,3 +505,47 @@ def test_no_token_in_names(module: Any) -> None:
 def test_enum_values_contain_no_token() -> None:
     for enum in (AiModality, AiCapability, AiTaskName, QualityClass, LatencyClass, CostClass):
         assert [m for m in enum if "token" in m.value.lower() or "token" in m.name.lower()] == []
+
+
+# --- instructions_version (T-019, AC-62, D-36) ---
+
+
+@pytest.mark.parametrize("label", [None, "v1", "a", "a" * 64, "2026-11.rc_1:b", "A.b-C_d:9"])
+def test_instructions_version_accepts_none_and_valid_labels(label: str | None) -> None:
+    assert AiTaskRequest(**_request(instructions_version=label)).instructions_version == label
+
+
+def test_instructions_version_defaults_to_none() -> None:
+    assert AiTaskRequest(**_request()).instructions_version is None
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "",
+        " ",
+        "   ",
+        "x" * 65,
+        "has space",
+        "a/b",
+        "caf\u00e9",
+        "ok\n",
+        "\tv1",
+        "a;b",
+        1,
+        1.5,
+        b"v1",
+        [],
+    ],
+)
+def test_instructions_version_rejects_invalid_labels_and_never_echoes_the_value(
+    label: Any,
+) -> None:
+    with pytest.raises(ValidationError) as caught:
+        AiTaskRequest(**_request(instructions_version=label))
+    message = str(caught.value)
+    assert "instructions_version" in message
+    marker = "zz-secret-label"
+    with pytest.raises(ValidationError) as leak:
+        AiTaskRequest(**_request(instructions_version=marker + " bad"))
+    assert marker not in str(leak.value)

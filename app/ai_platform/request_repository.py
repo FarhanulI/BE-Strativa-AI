@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_platform.enums import AiTaskName
 from app.ai_platform.errors import AiErrorCode
+from app.ai_platform.requests import validate_instructions_version
 from app.core import new_uuid7
 
 CompletionStatus = Literal["succeeded", "failed"]
@@ -118,11 +119,11 @@ class RequestSnapshot:
 _INSERT_SYNC = """
 INSERT INTO ai_requests
     (id, scope, workspace_id, requested_by_user_id, actor_type, task, output_schema_name,
-     output_schema_version, mode, status, lease_epoch, correlation_request_id, started_at,
-     created_at, updated_at)
+     output_schema_version, instructions_version, mode, status, lease_epoch,
+     correlation_request_id, started_at, created_at, updated_at)
 VALUES
     (:id, :scope, :workspace_id, :requested_by_user_id, :actor_type, :task, :schema_name,
-     :schema_version, 'sync', 'running', 0, :correlation, :now, :now, :now)
+     :schema_version, :instructions_version, 'sync', 'running', 0, :correlation, :now, :now, :now)
 """
 
 # One conditional UPDATE: the status guard makes completion happen at most once. The totals are
@@ -167,6 +168,7 @@ async def insert_sync_request(
     output_schema_version: int | None,
     correlation_request_id: str,
     now: datetime,
+    instructions_version: str | None = None,
 ) -> UUID:
     """Insert a ``sync`` request row, ``running``, and return its id (spec 4.5).
 
@@ -181,6 +183,9 @@ async def insert_sync_request(
     if task not in _TASKS:
         raise ValueError("task is not a registered task")
     _check_schema(task, output_schema_name, output_schema_version)
+    validate_instructions_version(instructions_version)
+    if instructions_version is not None and task == AiTaskName.EMBED_TEXT.value:
+        raise ValueError("EMBED_TEXT has no instructions_version")
     if not isinstance(correlation_request_id, str) or not correlation_request_id:
         raise ValueError("correlation_request_id must be a non-empty string")
     _aware("now", now)
@@ -197,6 +202,7 @@ async def insert_sync_request(
             "task": task,
             "schema_name": output_schema_name,
             "schema_version": output_schema_version,
+            "instructions_version": instructions_version,
             "correlation": correlation_request_id,
             "now": now,
         },

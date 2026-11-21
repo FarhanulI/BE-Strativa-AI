@@ -204,3 +204,25 @@ def test_no_token_in_the_new_modules_names() -> None:
                 names |= {n for n in vars(cls) if not n.startswith("__")}
                 names |= set(getattr(cls, "__dataclass_fields__", {}))
         assert [n for n in names if "token" in n.lower()] == []
+
+
+@pytest.mark.parametrize(
+    "label", ["", " ", "x" * 65, "has space", "a/b", "caf\u00e9", "ok\n", 1, b"v1", True]
+)
+async def test_insert_rejects_an_invalid_instructions_version_without_echoing_it(
+    label: Any,
+) -> None:
+    with pytest.raises(ValueError) as caught:
+        await _insert(instructions_version=label)
+    assert "instructions_version" in str(caught.value)
+    assert str(label) not in str(caught.value) or str(label) in {"", " ", "1", "True"}
+
+
+async def test_insert_rejects_a_label_on_an_embedding_request() -> None:
+    with pytest.raises(ValueError):
+        await _insert(
+            task=AiTaskName.EMBED_TEXT.value,
+            output_schema_name=None,
+            output_schema_version=None,
+            instructions_version="v1",
+        )

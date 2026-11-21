@@ -192,6 +192,10 @@ REQUEST_VIOLATIONS: list[tuple[str, str, dict[str, Any]]] = [
     ("ck_ai_requests_sync_no_lease", "sync", {"lease_epoch": 1}),
     ("ck_ai_requests_terminal_completed", "sync", {"status": "succeeded"}),
     ("ck_ai_requests_terminal_completed", "sync", {"status": "failed"}),
+    *[
+        ("ck_ai_requests_instructions_version", "sync", {"instructions_version": bad})
+        for bad in ("", "x" * 65, "has space", "a/b", "caf\u00e9", "ok\n", "semi;colon")
+    ],
     (
         "ck_ai_requests_purged",
         "async",
@@ -410,9 +414,7 @@ async def test_budget_rows_are_unique_per_period(db_session: AsyncSession) -> No
         "ai_budget_periods",
         budget_row(None, period_start=system_period),
     )
-    await _insert(
-        db_session, "ai_budget_periods", budget_row(None, period_start=date(2031, 2, 1))
-    )
+    await _insert(db_session, "ai_budget_periods", budget_row(None, period_start=date(2031, 2, 1)))
 
 
 # ---- foreign keys ------------------------------------------------------------------------
@@ -511,6 +513,7 @@ EXPECTED_CONSTRAINTS = {
                 "sync_no_lease",
                 "terminal_completed",
                 "purged",
+                "instructions_version",
             )
         },
     },
@@ -563,10 +566,7 @@ async def test_constraint_and_index_names_match_the_spec(db_session: AsyncSessio
     for table, expected in EXPECTED_CONSTRAINTS.items():
         names = set(
             await db_session.scalars(
-                text(
-                    "SELECT conname FROM pg_constraint "
-                    "WHERE conrelid = CAST(:table AS regclass)"
-                ),
+                text("SELECT conname FROM pg_constraint WHERE conrelid = CAST(:table AS regclass)"),
                 {"table": table},
             )
         )
@@ -666,3 +666,68 @@ def test_migration_is_reversible_on_the_local_throwaway_database(
     assert ai_tables <= after_upgrade
     assert earlier <= after_upgrade
     command.check(config)  # no drift between models and the migrated schema
+
+
+# ---- instructions_version (T-019, AC-62 and AC-63, D-36) ---------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("label", [None, "v1", "a" * 64, "2026-11.rc_1:b", "A.b-C_d:9"])
+async def test_instructions_version_accepts_null_and_valid_labels(
+    db_session: AsyncSession, label: str | None
+) -> None:
+    workspace_id = await _make_workspace(db_session, "req-label")
+    row = sync_request(workspace_id, instructions_version=label)
+    await _insert(db_session, "ai_requests", row)
+    stored = await db_session.scalar(
+        text("SELECT instructions_version FROM ai_requests WHERE id = :id"), {"id": row["id"]}
+    )
+    assert stored == label
+
+
+def test_instructions_version_migration_keeps_existing_rows_and_is_reversible(
+    migrated_test_schema: Settings,
+) -> None:
+    """AC-63: 0009 adds only a nullable column and a CHECK; a row from before it survives."""
+    if migrated_test_schema.test_db_mode != "local":
+        pytest.skip("Downgrade runs only on the local throwaway database (TEST_DB_MODE=local)")
+    config = Config("alembic.ini")
+    request_id = _new_id()
+
+    async def run(statement: str, params: dict[str, Any] | None = None) -> Any:
+        engine = build_async_engine(
+            migrated_test_schema.require_database_url(direct=True), pooled=False
+        )
+        try:
+            async with engine.begin() as connection:
+                result = await connection.execute(text(statement), params or {})
+                return result.all() if result.returns_rows else None
+        finally:
+            await engine.dispose()
+
+    insert = (
+        "INSERT INTO ai_requests (id, scope, actor_type, task, mode, status, "
+        "correlation_request_id) VALUES (:id, 'system', 'system', 'EMBED_TEXT', 'sync', "
+        "'running', 'req-t019')"
+    )
+    column_query = (
+        "SELECT count(*) FROM information_schema.columns WHERE table_name = 'ai_requests' "
+        "AND column_name = 'instructions_version' AND table_schema = current_schema()"
+    )
+    try:
+        command.downgrade(config, "0008_ai_platform")
+        assert asyncio.run(run(column_query))[0][0] == 0
+        asyncio.run(run(insert, {"id": request_id}))
+        command.upgrade(config, "head")
+        assert asyncio.run(run(column_query))[0][0] == 1
+        rows = asyncio.run(
+            run(
+                "SELECT instructions_version FROM ai_requests WHERE id = :id",
+                {"id": request_id},
+            )
+        )
+        assert rows == [(None,)]
+        command.check(config)  # no drift
+    finally:
+        command.upgrade(config, "head")
+        asyncio.run(run("DELETE FROM ai_requests WHERE id = :id", {"id": request_id}))

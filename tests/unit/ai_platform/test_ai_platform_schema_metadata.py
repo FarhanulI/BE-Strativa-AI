@@ -38,10 +38,13 @@ def test_package_does_not_export_orm_models() -> None:
     assert not {"AiRequest", "AiUsageRecord", "AiBudgetPeriod"} & set(ai_platform.__all__)
 
 
-def test_alembic_has_a_single_head_after_profile() -> None:
+def test_alembic_has_a_single_head_after_instructions_version() -> None:
     config = Config("alembic.ini")
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0008_ai_platform"]
-    revision = script.get_revision("0008_ai_platform")
+    assert script.get_heads() == ["0009_instructions_version"]
+    revision = script.get_revision("0009_instructions_version")
     assert revision is not None
-    assert revision.down_revision == "0007_profile"
+    assert revision.down_revision == "0008_ai_platform"
+    earlier = script.get_revision("0008_ai_platform")
+    assert earlier is not None
+    assert earlier.down_revision == "0007_profile"

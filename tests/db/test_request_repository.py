@@ -557,3 +557,38 @@ async def test_snapshot_reads_the_metadata_and_is_immutable(env: AiDbEnv) -> Non
 async def test_snapshot_of_a_missing_request_is_none(env: AiDbEnv) -> None:
     async with env.sessions() as session, session.begin():
         assert await requests_repo.get_request_snapshot(session, uuid4()) is None
+
+
+# --------------------------------------------------------------------------------------------
+# instructions_version (T-019, AC-62, D-36)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("label", [None, "hooks.v3", "a" * 64])
+async def test_insert_stores_the_instructions_version_label(
+    env: AiDbEnv, label: str | None
+) -> None:
+    clock = env.clock()
+    workspace_id = await env.new_workspace()
+    async with env.sessions() as session, session.begin():
+        request_id = await requests_repo.insert_sync_request(
+            session,
+            scope="workspace",
+            workspace_id=workspace_id,
+            requested_by_user_id=None,
+            actor_type="user",
+            task="GENERATE_HOOK_VARIATIONS",
+            output_schema_name="HookVariationSet",
+            output_schema_version=1,
+            correlation_request_id="req-test",
+            now=clock.now(),
+            instructions_version=label,
+        )
+        env.requests.append(request_id)
+    assert (await env.request_row(request_id)).instructions_version == label
+
+
+async def test_an_embedding_row_has_no_instructions_version(env: AiDbEnv) -> None:
+    clock = env.clock()
+    request_id = await _insert(env, clock, None)
+    assert (await env.request_row(request_id)).instructions_version is None
