@@ -2,8 +2,8 @@
 
 - **Module:** ai_platform
 - **Phase:** 2 — AI & Knowledge Platform
-- **Specification status:** Approved at revision 4 (date not stated), at revisions 5, 6 and 7 (owner decision, this conversation, 2026-11-19) and at revision 8 (owner decision on change proposal CP-1, 2026-11-20; see below).
-- **Revision:** Content is at revision 8. Revision 8 applies [CP-1](change-proposals/CP-1-catalog-verification-fields.md) (task T-018): the catalog verification fields, the loader refusal of unverified entries and the per-task `task_min_input_units` of AC-60, in sections 10.1 and 17.5 only. No numbering changed.
+- **Specification status:** Approved at revision 4 (date not stated), at revisions 5, 6 and 7 (owner decision, this conversation, 2026-11-19) at revision 8 (owner decision on change proposal CP-1, 2026-11-20) and at revision 9 (owner decision on change proposal CP-2, 2026-11-21; see below).
+- **Revision:** Content is at revision 9. Revision 9 applies [CP-2](change-proposals/CP-2-instructions-version.md) (task T-019): the `instructions_version` label on `ai_requests` and `AiTaskRequest`, decision D-36, AC-62 and AC-63, in sections 4.1, 5.1, 12.4, 17.5 and 20.1 only. No numbering changed. Revision 8 applies [CP-1](change-proposals/CP-1-catalog-verification-fields.md) (task T-018): the catalog verification fields, the loader refusal of unverified entries and the per-task `task_min_input_units` of AC-60, in sections 10.1 and 17.5 only. No numbering changed.
 - **Approval status:** Revision 4: owner approval explicitly recorded in the Status paragraph below (approval date: Not stated). Revisions 5 to 7 (D-24 to D-35, AC-59 and the related text): approved by the owner on 2026-11-19, recorded as "owner decision, this conversation" (task T-006 in [docs/tasks/](../../tasks/README.md)). This records approval only. No requirement text was changed, no earlier approval evidence exists for these revisions, and D-32 and D-20 remain unresolved (T-004, T-005).
 - **Identifier scheme:** `INV-n`, `AC-n`, `D-n` and `OQ-n` are unprefixed and are preserved exactly (SDD-D-5). D-32 is referenced by code and tests but has no entry in section 20.1; D-20 has no revision stated. Both are unresolved historical discrepancies recorded in [decisions.md](../../decisions.md), not fixed here.
 - **Metadata added by the SDD migration.** The Status paragraph below is the original text and is unchanged.
@@ -110,10 +110,11 @@ All three tables are `tenant_scoped`. `workspace_id` is nullable only for `scope
 | `task` | text not null | registry task name |
 | `output_schema_name` | text null | null only for `EMBED_TEXT` |
 | `output_schema_version` | int null | null only for `EMBED_TEXT` |
+| `instructions_version` | text null | Opaque label chosen by the calling domain module for the trusted `instructions` text (D-6, D-36). A label, never content. Null for embedding rows and for rows created before revision 9. No backfill. |
 | `mode` | text not null | `sync` \| `async` |
 | `status` | text not null | `queued` \| `running` \| `succeeded` \| `failed`. `queued` is used by async requests only. Sync requests are created `running` (4.5). |
 | `idempotency_key` | uuid null | caller-supplied on `submit`; present exactly when `mode = 'async'`. Sync requests (`run`, `embed_texts`) have no idempotency key (F-1). |
-| `request_fingerprint` | char(64) null | SHA-256 over the canonical request; present exactly when `mode = 'async'`. The same key with a different fingerprint is a `Conflict`. |
+| `request_fingerprint` | char(64) null | SHA-256 over the canonical request, which includes `instructions_version` (null and absent are the same value); present exactly when `mode = 'async'`. The same key with a different fingerprint is a `Conflict`. |
 | `input_payload` | jsonb null | present only for `async` (the worker needs it). **Content.** Never logged, evented or put in errors. Nulled by the purge job (8.3). |
 | `output_payload` | jsonb null | validated output; present for `async`, and for `sync` only when `persist_result=True`. **Content.** Nulled by the purge job (8.3). |
 | `content_purged_at` | timestamptz null | set by `ai_platform.purge_expired_content` (8.3) |
@@ -144,6 +145,7 @@ Constraints:
 - `ck_ai_requests_sync_no_lease`: `mode = 'async' OR (lease_owner IS NULL AND lease_expires_at IS NULL AND lease_epoch = 0)`.
 - `ck_ai_requests_terminal_completed`: `status NOT IN ('succeeded','failed') OR completed_at IS NOT NULL`.
 - `ck_ai_requests_purged`: `content_purged_at IS NULL OR (input_payload IS NULL AND output_payload IS NULL)`.
+- `ck_ai_requests_instructions_version` (rev 9, D-36): `instructions_version IS NULL OR (char_length(instructions_version) BETWEEN 1 AND 64 AND instructions_version ~ '^[A-Za-z0-9._:-]+$')`.
 
 Indexes:
 
@@ -290,12 +292,13 @@ class AiTaskRequest(BaseModel):       # extra="forbid", frozen
     context: list[AiContextBlock] = []
     parts: list[AiPart] = []          # multimodal input (13); empty for text-only tasks
     output_schema_version: int | None = None   # None = registry default
+    instructions_version: str | None = None    # opaque label of `instructions` (D-36): 1-64 chars of [A-Za-z0-9._:-]
     max_output_units: int | None = None        # may only lower the task default
     quality_floor: QualityClass | None = None  # may only raise the task's class
     persist_result: bool = False               # sync only
 ```
 
-`AiTaskRequest` has no field that can name a provider or model (INV-2). `instructions` is trusted. Everything in `context` and any `TextPart` in `parts` is untrusted (11.1).
+`AiTaskRequest` has no field that can name a provider or model (INV-2). `instructions_version` (rev 9, D-36) is validated when present: non-blank, 1 to 64 characters, only letters, digits and `._:-`; an invalid value is rejected, never truncated or normalized, and an error carries the field name, never the value. The platform never interprets it, never derives it from content and never uses it to route. `instructions` is trusted. Everything in `context` and any `TextPart` in `parts` is untrusted (11.1).
 
 The `AiCallContext` constructors are the only way to build a context. The budget row a call uses is determined by the context (see 12.3):
 
@@ -878,9 +881,10 @@ If actual cost exceeds the reserved estimate, which should not happen because th
 ### 12.4 Logging, audit, privacy
 
 - Log events: `ai_call_started`, `ai_call_finished`, `ai_budget_refused`, `ai_budget_threshold`, `ai_content_purged`, `ai_budget_reconciled`, `ai_budget_reconcile_mismatch`. The only fields are:
-  - ids and codes: `request_id`, `workspace_id`, `task`, `provider`, `model`, `route_rank`, `status`, `error_code`,
+  - ids and codes: `request_id`, `workspace_id`, `task`, `instructions_version` (rev 9, D-36; in `ai_call_started` and `ai_call_finished` only), `provider`, `model`, `route_rank`, `status`, `error_code`,
   - counts: `input_units`, `output_units`, `latency_ms`, `cost_micro_usd`, `purged_count`, `rows_checked`, `rows_skipped`, `mismatch_count`, `usage_row_count`.
 - No content ever appears in a log field, an exception message or a problem response. LiteLLM's message logging and success callbacks are disabled. Exception text from providers is never propagated. It is mapped to an `error_code`.
+- `instructions_version` may also appear in audit details. It is not placed in any event payload until a consumer needs it, and then only through a versioned event change (D-36).
 - The audit trail records threshold crossings and exhaustion. The per-call ledger is `ai_usage_records`, not `audit_log`.
 
 ## 13. Multimodal-ready interfaces
@@ -1096,6 +1100,8 @@ Fake-provider tests (AC-1 to AC-53, AC-58 and AC-59) run by default on a local P
 59. **AC-59.** Reservation equals the Router estimate (D-24, INV-10). Implemented with the orchestrator. For a routed call, the amount reserved for the chosen model equals exactly that candidate's Router-produced `estimated_cost_micro_usd`. For identical figures (the same cost, remaining budget and ceiling), the Router's within-budget decision and the atomic reservation never disagree: a candidate the Router passes at step 7 is admitted by a reservation against the same unchanged snapshot, and one it removes is refused by a reservation of that amount.
 60. **AC-60.** Catalog fitness (D-26, D-28). Implemented in the catalog step, DB-free. For every task and every catalog model eligible for it by capability, modality and quality: (a) the worst-case output cost at the task's default `max_output_units`, clamped to the model's maximum, does not exceed the task's cost-class ceiling (section 9); (b) the maximum input units the ceiling allows, `floor((ceiling − output cost) / input price)`, is at least a per-task `required_min_input_units`. That value is the catalog's top-level `task_min_input_units` entry for the task (rev 8), set in the catalog step from verified prices, and no number is written in this spec. A catalog that has no entry for a task fails the test. The test prints the full (task, model) table and fails on a violation.
 61. **AC-61.** Effective output cap (D-31, INV-10). The Router part is implemented with the Router: each selected candidate's `effective_max_output_units` equals `min(resolved max_output_units, that model's maximum)` (`None` for `EMBED_TEXT`), equals the value that makes the context-fit boundary pass at the exact limit and fail one unit beyond it, and is the value behind the candidate's `estimated_cost_micro_usd`. The adapter part, verified when the adapter exists: the provider request sent for the selected model carries exactly that value as its output limit.
+62. **AC-62.** Label validation and persistence (D-36, D-6). Unit: `AiTaskRequest` accepts `None` and valid labels (letters, digits, `._:-`, lengths 1 and 64) and rejects blank, whitespace-only, 65 characters, any other character (space, slash, non-ASCII) and non-strings, with an error that names the field and not the value. DB: a created request row stores the label and reads it back; a row whose label violates the rule is refused by `ck_ai_requests_instructions_version`; embedding rows and rows created without a label are null. The same idempotency key with the same label returns the same request, and the same key with a different label, or with and without a label, raises `Conflict` (this last clause is exercised when `submit` exists, T-011; until then the stored column and the validation are covered).
+63. **AC-63.** Migration `0009` (D-36). It adds the nullable column and the CHECK only, with no data change. Upgrade, downgrade and upgrade again succeed on a database holding existing rows, and `alembic check` reports no drift.
 
 ### 17.6 Real-provider smoke test (separate, small)
 
@@ -1237,6 +1243,7 @@ The owner's decisions, applied as decided. D-1 came from the review. D-2 to D-13
 | D-33 (new, rev 7) | Any budget refusal, whether detected by the Router's snapshot step 7 or by the atomic reservation, is recorded through the same refusal transaction (flag, `ai.budget_exhausted` at most once per budget row and period, audit record) BEFORE `AiBudgetExceeded` is raised. The sync request row ends `failed` with `error_code = budget_exceeded`; no usage row and no reservation exist (4.5, 12.3). | One refusal path keeps the event and the audit trail identical however the refusal was found. |
 | D-34 (new, rev 7) | The reservation of a repair call is computed with the same pricing helper from the margin-padded estimated input of the repair messages and the same effective `max_output_units` for the same model. It is a new reservation (`call_kind='repair'`) and must not exceed the task's cost-class ceiling; if it does, the repair is skipped without a provider call and the candidate counts as failed (invalid output). If the atomic reservation is refused, the request fails `budget_exceeded` (D-33). D-24 applies to the first call of each candidate (11, 12.2). | A repair costs real money, so it is priced and bounded like any other call. |
 | D-35 (new, rev 7) | If the circuit breaker denies an attempt at call time (its state changed after routing), that candidate is skipped without counting as an attempt and without a ledger row. If every remaining candidate is skipped, the request fails with `provider_unavailable` (10.3). | A denied attempt makes no call, so it must not consume the attempt budget or write a ledger row. |
+| D-36 (new, rev 9) | `instructions_version` is an optional, caller-supplied label stored on `ai_requests`. It is part of the canonical request used for idempotency. It is nullable now; making it required is a later change once a domain module calls the platform. It is validated in `AiTaskRequest` and by a database CHECK with the same rule. | A prompt change must be traceable to quality, latency and cost without storing prompt content (F-2). |
 
 Review fixes F-1 to F-6 are applied in sections 4, 5, 7, 11, 12, 16 and 17, and the fixed decisions listed in F-6 are unchanged. Revision 2 also applies three review items: lease fencing (E-1, 8.1, INV-28), the budget reconciliation job (E-2, 8.4, INV-30) and the error classification table (E-3, 10.3). Revision 3 adds precision fixes for abandoned-record accounting (8.2, 12.1) and the identifier-type boundary note (5.1).
 
