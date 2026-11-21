@@ -80,6 +80,52 @@ def require_local_test_targets(urls: Sequence[str]) -> DatabaseTarget:
     return targets[0]
 
 
+@dataclass(frozen=True)
+class EnvFileSelection:
+    env_files: tuple[Path, ...]
+    base_env: dict[str, str | None]
+    test_env: dict[str, str | None]
+    selected_env: str
+
+
+def select_env_files(
+    root: Path,
+    environment_override: str | None,
+    requested_mode: str,
+    *,
+    read_files: bool = True,
+) -> EnvFileSelection:
+    """Choose the env files for the selected environment (shared with ai_platform config).
+
+    Order: the APP_ENV override, then APP_ENV in ``.env``, then in the test file, then dev. Dev
+    reads ``.env`` and ``.env.local``; test reads ``.env`` and the test file for the requested
+    TEST_DB_MODE; every other environment reads no file. With ``read_files=False`` nothing is read.
+    """
+    base_env = (
+        dotenv_values(root / ".env")
+        if read_files and environment_override != AppEnvironment.PROD
+        else {}
+    )
+    test_env_name = ".env.test.docker.local" if requested_mode == "local" else ".env.test.local"
+    test_env = (
+        dotenv_values(root / test_env_name) if read_files and environment_override is None else {}
+    )
+    selected_env = (
+        environment_override
+        or base_env.get("APP_ENV")
+        or test_env.get("APP_ENV")
+        or AppEnvironment.DEV
+    )
+    env_files: tuple[Path, ...] = ()
+    if read_files:
+        if selected_env == AppEnvironment.DEV or selected_env == AppEnvironment.DEV.value:
+            env_files = (root / ".env", root / ".env.local")
+        elif selected_env == AppEnvironment.TEST or selected_env == AppEnvironment.TEST.value:
+            env_files = (root / ".env", root / test_env_name)
+        env_files = tuple(path for path in env_files if path.is_file())
+    return EnvFileSelection(env_files, base_env, test_env, str(selected_env))
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         case_sensitive=False,
@@ -104,39 +150,19 @@ class Settings(BaseSettings):
 
     def __init__(self, **values: Any) -> None:
         env_file_was_provided = "_env_file" in values
-        root = self.repository_root()
         environment_override = values.get("app_env") or os.environ.get("APP_ENV")
-        base_env = (
-            dotenv_values(root / ".env")
-            if not env_file_was_provided and environment_override != AppEnvironment.PROD
-            else {}
+        requested_mode = str(values.get("test_db_mode") or os.environ.get("TEST_DB_MODE") or "neon")
+        selection = select_env_files(
+            self.repository_root(),
+            environment_override,
+            requested_mode,
+            read_files=not env_file_was_provided,
         )
-        requested_mode = str(
-            values.get("test_db_mode") or os.environ.get("TEST_DB_MODE") or "neon"
-        )
-        test_env_name = (
-            ".env.test.docker.local" if requested_mode == "local" else ".env.test.local"
-        )
-        test_env = (
-            dotenv_values(root / test_env_name)
-            if not env_file_was_provided and environment_override is None
-            else {}
-        )
-        selected_env = (
-            environment_override
-            or base_env.get("APP_ENV")
-            or test_env.get("APP_ENV")
-            or AppEnvironment.DEV
-        )
+        base_env = selection.base_env
+        test_env = selection.test_env
+        selected_env = selection.selected_env
         if not env_file_was_provided:
-            env_files: tuple[Path, ...]
-            if selected_env == AppEnvironment.DEV or selected_env == AppEnvironment.DEV.value:
-                env_files = (root / ".env", root / ".env.local")
-            elif selected_env == AppEnvironment.TEST or selected_env == AppEnvironment.TEST.value:
-                env_files = (root / ".env", root / test_env_name)
-            else:
-                env_files = ()
-            values["_env_file"] = tuple(path for path in env_files if path.is_file())
+            values["_env_file"] = selection.env_files
 
         explicit_app_env = "app_env" in values or "APP_ENV" in os.environ
         if not explicit_app_env and selected_env != AppEnvironment.PROD:
@@ -144,8 +170,7 @@ class Settings(BaseSettings):
             explicit_app_env = explicit_app_env or test_env.get("APP_ENV") is not None
             if values.get("_env_file"):
                 explicit_app_env = explicit_app_env or any(
-                    dotenv_values(path).get("APP_ENV") is not None
-                    for path in values["_env_file"]
+                    dotenv_values(path).get("APP_ENV") is not None for path in values["_env_file"]
                 )
         super().__init__(**values)
         if self.test_db_mode != requested_mode:

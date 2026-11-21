@@ -10,6 +10,9 @@ migrate-test:
 test-db:
     uv run --python 3.12 --no-sync python scripts/test_db.py
 
+sync-env:
+    uv run --python 3.12 --no-sync python scripts/sync_env_local.py
+
 openapi:
     uv run --python 3.12 --no-sync python scripts/generate_openapi.py
 

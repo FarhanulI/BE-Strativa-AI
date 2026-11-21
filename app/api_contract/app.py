@@ -40,6 +40,7 @@ from app.core import (
 from app.db_migrations import dispose_database
 from app.observability_audit import check_database, check_redis, configure_logging
 from app.profile import register_routes as register_profile_routes
+from app.workspace import WorkspaceAccessService, WorkspaceService
 from app.workspace import register_routes as register_workspace_routes
 
 DependencyCheck = Callable[[Settings], Awaitable[DependencyStatus]]
@@ -105,7 +106,12 @@ def create_app(
     app.add_exception_handler(DomainError, _api_domain_error_handler)
     app.add_exception_handler(RequestValidationError, _request_validation_error_handler)
     app.add_exception_handler(Exception, _unhandled_error_handler)
-    register_auth_routes(app)
+    # Composition root: auth defines the protocols, workspace implements them (ADR-0003).
+    register_auth_routes(
+        app,
+        workspace_provisioner=WorkspaceService,
+        workspace_roles=WorkspaceAccessService,
+    )
     register_workspace_routes(app)
     register_profile_routes(app)
 

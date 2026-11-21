@@ -36,6 +36,10 @@ Generate the secret with:
 uv run python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
+Every variable added to `.env.example` must also be added to `.env.local` in the same change. Run `just sync-env` (`scripts/sync_env_local.py`) to append the missing names as placeholders; it never changes existing lines and prints names only.
+
+`ai_platform` variables (`AI_*`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`) can be set in `.env.local` or in the process environment. `AiPlatformConfig` reads the same files as core `Settings` (in test mode `.env.local` is not read) and the process environment wins over file values.
+
 Keys are listed in `.env.example`. Never commit populated env files. `NEON_BRANCH_NAME` must match `APP_ENV` (`dev`, `test`, `production`).
 
 ## Start Redis
@@ -92,6 +96,7 @@ Restart the server after changing env files.
 | `just test-db` | Run DB tests in Neon mode (needs `.env.test.local`, `APP_ENV=test`) |
 | `just test-db-up` / `just test-db-local` / `just test-db-down` | Start, use and remove the local Docker test database (`TEST_DB_MODE=local`) |
 | `just openapi` | Regenerate `openapi.json` |
+| `just sync-env` | Append names missing from `.env.local` that exist in `.env.example` (names only, never values) |
 
 ## Test database modes
 
@@ -107,6 +112,29 @@ $env:TEST_DB_MODE="local"; $env:APP_ENV="test"
 uv run python scripts/test_db.py                        # just test-db-local
 docker rm -f strativa-test-db                           # just test-db-down (data is on tmpfs)
 ```
+
+`APP_ENV=test` must be exported in the process environment, not only present in `.env.test.docker.local`. The entry guard and most DB tests load that file, but tests that build `Settings(_env_file=None)` (the auth, workspace and profile API tests, 13 in all) read only the process environment and fail with `TEST_DB_MODE=local requires APP_ENV=test` if it is missing. The guard is correct to refuse.
+
+`/run-db-suite [all | tests/db/<file>.py]` (Claude Code skill, manual only) starts the container, runs the suite through the real guard, redacts the password from the output and always cleans up (`scripts/run_db_suite.sh`).
+`TEST_DB_PASSWORD` must be set in the shell before starting the agent (for example `read -rs TEST_DB_PASSWORD; export TEST_DB_PASSWORD`); the agent never sets, accepts or prints it.
+
+### Neon mode in detail
+
+Neon runs are a separately authorised task (see the standing rules); they never happen as a side effect of another task.
+
+Prerequisites, all set up by the owner:
+
+- A dedicated Neon test branch, labelled `NEON_BRANCH_NAME=test`, never the dev or production branch.
+- `.env.test.local` created by the owner and git-ignored, with `APP_ENV=test`, `NEON_BRANCH_NAME=test` and the pooled and direct URLs of the test branch. `APP_ENV=test` (and `TEST_DB_MODE=neon`, or unset) must also be exported in the process environment.
+- The marker, set once by the owner on the test branch only: `ALTER DATABASE <dbname> SET app.test_db_marker = 'neon-test-branch-v1';`
+
+How it works: after the static rules (label must equal the `APP_ENV` label, loopback and unix-socket hosts refused) the guard connects once through the direct URL, before any migration, and requires `current_database()` to equal the database name in the URL and `current_setting('app.test_db_marker', true)` to equal `neon-test-branch-v1`. A missing, empty, differently cased or padded marker, or the local marker, is refused with a fixed message, and the Neon marker is likewise refused in local mode. No Neon host pattern is consulted; the marker is the evidence. The live check never runs for `APP_ENV` dev or prod. The audit teardown helper accepts the marker of the active mode only.
+
+A Neon run applies the migrations to the test branch (`alembic upgrade head`). Reversibility and downgrade tests never run in Neon mode; they require local mode.
+
+Pooled endpoint caveat: migrations, the live check and the gate check use the direct URL. A direct URL whose host contains `-pooler` points at the pooler, which is not suitable for DDL; the gate check reports this per variable (see below).
+
+Read-only gate check, which touches nothing and prints no URL, host or credential: `uv run python scripts/neon_gate_check.py [--counts]`. It prints `mode`, `label_ok`, `marker_ok`, one `pooled_<VARIABLE>` boolean per configured URL variable (`pooled_DATABASE_URL`, `pooled_DATABASE_URL_DIRECT`, `pooled_DATABASE_URL_UNPOOLED`; true when that URL's host name contains `-pooler`; names only, never hosts), `test_connection_variable` (the variable the test suite connects through, `DATABASE_URL_DIRECT`; if only `DATABASE_URL_UNPOOLED` is set, Settings copies it into that field), `server_major_version`, `extensions` (names), `audit_trigger_enabled` and, with `--counts`, row counts of `ai_requests`, `ai_usage_records`, `ai_budget_periods`, `workspaces`, `users`, `outbox_events` and `audit_log`. Exit code 0 only when `label_ok` and `marker_ok` are both true; it refuses local mode and `APP_ENV` dev or prod.
 
 SQLite is never a substitute. Tests never run against the dev or production databases. A scheduled nightly run on the Neon `test` branch is planned as a later delivery-phase job and is not defined yet.
 

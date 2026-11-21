@@ -1,5 +1,12 @@
 # Profile Feature Specification
 
+- **Module:** profile
+- **Phase:** 1 — Core & Tenancy
+- **Specification status:** Not stated (pending owner confirmation)
+- **Revision:** Not stated
+- **Approval status:** Not recorded (pending owner confirmation)
+- **Requirement ID prefix:** `PROF` (`PROF-INV-n`, `PROF-AC-n`). Assigned by the SDD migration; see [traceability.md](../../traceability.md).
+
 ## Backend
 
 ### Purpose
@@ -77,24 +84,24 @@ None in Phase 1.
 
 ### Invariants
 
-- BusinessContext is optional for every profile type. Creators remain complete without it; adding context later does not require profile-row changes or a schema change.
-- This module owns identity, business context, and maturity only. Phase 3 intelligence modules reference `profile_id`; they do not add their columns or tables here.
-- All tenant queries include `workspace_id` and entity `id`; all child rows also have composite profile/workspace foreign keys.
-- Every mutation of an existing profile (PATCH, archive, restore, business-context PUT, child POST/PATCH/DELETE) is optimistic-concurrency checked against the parent profile version under a row lock. A mismatch never overwrites user edits and returns the current profile state in the conflict response; successful mutations advance the parent version and return its ETag. Profile creation has no existing version and does not require If-Match.
-- Archive and child DELETE are soft state changes; profile and child records are never hard-deleted by the API.
-- Verified performance count is non-negative and monotonic. A replayed idempotency key causes no count, version, stage, audit, or event change.
-- Stage transitions use configured deterministic thresholds. This module does not compute exploration percentages.
-- Create/update validation failures return 422 `application/problem+json`; `field_errors`, `request_id`, and `trace_id` use the single shape documented by API Contract. This API does not use 400 for model validation.
+- **PROF-INV-1.** BusinessContext is optional for every profile type. Creators remain complete without it; adding context later does not require profile-row changes or a schema change.
+- **PROF-INV-2.** This module owns identity, business context, and maturity only. Phase 3 intelligence modules reference `profile_id`; they do not add their columns or tables here.
+- **PROF-INV-3.** All tenant queries include `workspace_id` and entity `id`; all child rows also have composite profile/workspace foreign keys.
+- **PROF-INV-4.** Every mutation of an existing profile (PATCH, archive, restore, business-context PUT, child POST/PATCH/DELETE) is optimistic-concurrency checked against the parent profile version under a row lock. A mismatch never overwrites user edits and returns the current profile state in the conflict response; successful mutations advance the parent version and return its ETag. Profile creation has no existing version and does not require If-Match.
+- **PROF-INV-5.** Archive and child DELETE are soft state changes; profile and child records are never hard-deleted by the API.
+- **PROF-INV-6.** Verified performance count is non-negative and monotonic. A replayed idempotency key causes no count, version, stage, audit, or event change.
+- **PROF-INV-7.** Stage transitions use configured deterministic thresholds. This module does not compute exploration percentages.
+- **PROF-INV-8.** Create/update validation failures return 422 `application/problem+json`; `field_errors`, `request_id`, and `trace_id` use the single shape documented by API Contract. This API does not use 400 for model validation.
 
 ### Acceptance criteria
 
-- A profile in workspace A cannot be read, updated, or linked to children through workspace B, including crafted profile/item IDs; cross-workspace child inserts also fail their composite FK.
-- Every profile route is registered in the shared tenant-isolation route registry and returns 404 to a non-member.
-- OWNER/ADMIN/MEMBER permissions are tested on every profile route, including `profile:*` permissions.
-- A creator profile can be created, read, and updated without BusinessContext; context can later be added without changing the profile row.
-- A stale `If-Match` returns 409 with current state and leaves the stored user edit/version unchanged; missing `If-Match` is rejected.
-- Configured maturity thresholds are tested at boundaries. Transitions emit exactly one `ProfileMaturityChanged`; replaying an idempotency UUID changes nothing.
-- The architecture boundary test continues to reject cross-module internal imports.
+- **PROF-AC-1.** A profile in workspace A cannot be read, updated, or linked to children through workspace B, including crafted profile/item IDs; cross-workspace child inserts also fail their composite FK.
+- **PROF-AC-2.** Every profile route is registered in the shared tenant-isolation route registry and returns 404 to a non-member.
+- **PROF-AC-3.** OWNER/ADMIN/MEMBER permissions are tested on every profile route, including `profile:*` permissions.
+- **PROF-AC-4.** A creator profile can be created, read, and updated without BusinessContext; context can later be added without changing the profile row.
+- **PROF-AC-5.** A stale `If-Match` returns 409 with current state and leaves the stored user edit/version unchanged; missing `If-Match` is rejected.
+- **PROF-AC-6.** Configured maturity thresholds are tested at boundaries. Transitions emit exactly one `ProfileMaturityChanged`; replaying an idempotency UUID changes nothing.
+- **PROF-AC-7.** The architecture boundary test continues to reject cross-module internal imports.
 
 ### Non-goals
 

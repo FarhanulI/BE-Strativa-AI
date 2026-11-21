@@ -1,5 +1,12 @@
 # API Contract Module Specification
 
+- **Module:** api_contract
+- **Phase:** 0 — Foundation
+- **Specification status:** Not stated (pending owner confirmation)
+- **Revision:** Not stated
+- **Approval status:** Not recorded (pending owner confirmation)
+- **Requirement ID prefix:** `API` (`API-INV-n`, `API-AC-n`). Assigned by the SDD migration; see [traceability.md](../../traceability.md).
+
 ## Backend
 
 ### Purpose
@@ -54,15 +61,15 @@ No auth in Phase 0. Readiness discloses dependency status only, with no URLs, ve
 
 ### Invariants
 
-- Import, app creation, and OpenAPI generation are DB/Redis-free.
-- Every request has a generated or propagated request ID; errors follow the shared problem-details schema.
-- Readiness timeouts and retries are bounded.
+- **API-INV-1.** Import, app creation, and OpenAPI generation are DB/Redis-free.
+- **API-INV-2.** Every request has a generated or propagated request ID; errors follow the shared problem-details schema.
+- **API-INV-3.** Readiness timeouts and retries are bounded.
 
 ### Acceptance criteria
 
-- OpenAPI generation runs with no DB/Redis configuration and includes readiness plus routes registered through public feature interfaces.
-- App-level tests verify success, database unavailable, Redis unavailable/unconfigured, redacted response, and RFC 7807 errors.
-- Request ID propagates to logs/context; generated OpenAPI artifact is reproducible.
+- **API-AC-1.** OpenAPI generation runs with no DB/Redis configuration and includes readiness plus routes registered through public feature interfaces.
+- **API-AC-2.** App-level tests verify success, database unavailable, Redis unavailable/unconfigured, redacted response, and RFC 7807 errors.
+- **API-AC-3.** Request ID propagates to logs/context; generated OpenAPI artifact is reproducible.
 
 ### Non-goals
 

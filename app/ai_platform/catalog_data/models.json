@@ -1,0 +1,73 @@
+{
+  "catalog_version": "2026-11-20-1",
+  "price_version": "2026-11-20",
+  "task_min_input_units": {
+    "ANALYZE_MARKET_TRENDS": 32000,
+    "GENERATE_CONTENT_BRIEF": 100000,
+    "GENERATE_CHANNEL_EXECUTION": 32000,
+    "GENERATE_CONTENT_DRAFT": 100000,
+    "GENERATE_HOOK_VARIATIONS": 8000,
+    "ANALYZE_PERFORMANCE": 32000,
+    "EXTRACT_AUDIENCE_SIGNALS": 8000,
+    "SYNTHESIZE_SIGNALS": 32000,
+    "EMBED_TEXT": 120000
+  },
+  "models": [
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite",
+      "enabled": true,
+      "capabilities": ["text_generation", "structured_output", "reasoning", "retrieval_grounding"],
+      "input_modalities": ["text"],
+      "output_modalities": ["text"],
+      "quality_tier": "standard",
+      "context_window_units": 1048576,
+      "max_output_units": 65536,
+      "supports_json_schema": true,
+      "latency_p50_ms": 1500,
+      "input_micro_usd_per_million_units": 300000,
+      "output_micro_usd_per_million_units": 2500000,
+      "price_source_url": "https://aistudio.google.com/docs/pricing",
+      "price_checked_on": "2026-11-20",
+      "verified": true,
+      "verified_on": "2026-11-20"
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.8-flash",
+      "enabled": true,
+      "capabilities": ["text_generation", "structured_output", "reasoning", "retrieval_grounding"],
+      "input_modalities": ["text"],
+      "output_modalities": ["text"],
+      "quality_tier": "high",
+      "context_window_units": 1048576,
+      "max_output_units": 65536,
+      "supports_json_schema": true,
+      "latency_p50_ms": 3000,
+      "input_micro_usd_per_million_units": 750000,
+      "output_micro_usd_per_million_units": 3750000,
+      "price_source_url": "https://aistudio.google.com/docs/pricing",
+      "price_checked_on": "2026-11-20",
+      "verified": true,
+      "verified_on": "2026-11-20"
+    },
+    {
+      "provider": "perplexity",
+      "model": "pplx-embed-v1-0.6b",
+      "enabled": true,
+      "capabilities": ["embedding"],
+      "input_modalities": ["text"],
+      "output_modalities": [],
+      "quality_tier": "standard",
+      "context_window_units": 32768,
+      "supports_json_schema": false,
+      "latency_p50_ms": 300,
+      "input_micro_usd_per_million_units": 4000,
+      "output_micro_usd_per_million_units": 0,
+      "price_source_url": "https://docs.perplexity.ai/docs/getting-started/pricing",
+      "price_checked_on": "2026-11-20",
+      "verified": true,
+      "verified_on": "2026-11-20"
+    }
+  ]
+}
