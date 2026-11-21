@@ -1,6 +1,6 @@
 # CP-2: `instructions_version` on AI task requests (change proposal for the AI Platform spec)
 
-- **Status:** Proposed (not applied; the approved spec is unchanged). The owner confirmed the design points on 2026-11-21: label is part of the canonical request, SDD-Q-4 constraints, a database CHECK, recorded as decision `D-36`. The exact text below awaits approval.
+- **Status:** Approved by the owner 2026-11-21 and applied as spec revision 9 (task T-019). The text below is the approved proposal; the migration id was shortened to `0009_instructions_version` (Alembic's version column holds 32 characters).
 - **Raised by:** task [T-019](../../../tasks/T-019-instructions-version.md); conformance finding F-2.
 - **Spec revision it would amend:** revision 8, producing revision 9. Sections 4.1, 5.1, 12.4, the decision table 20.1 (new `D-36`) and 17.5 (new `AC-62`, `AC-63`). Answers SDD-Q-4.
 - **Rule:** SDD rules 4 and 15. Nothing in `spec.md` is edited until the owner approves this text.

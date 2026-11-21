@@ -1,7 +1,7 @@
 # T-019: `instructions_version` on AI requests (change proposal, then nullable migration)
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** Implemented (stops 1 and 2 done 2026-11-21; DB-free gate green; awaiting a manual `/run-db-suite all` and owner result review)
+- **State:** Accepted (stops 1 and 2 done 2026-11-21; DB-free gate and local DB suite green; accepted by the owner 2026-11-21)
 - **Requirement IDs:** None for the proposal (it is a spec change proposal under [sdd.md](../sdd.md) section 7). If approved it adds new requirements with the next free `AC-n`; no existing ID is renumbered. Existing requirements that touch the changed text are listed by `sdd-analyze-spec` when the task is prepared.
 - **Specification references:** [AI Platform spec](../specs/ai-platform/spec.md) 4.1 (`ai_requests`), 5.1 (request types), 12.4 (logging and privacy), D-6 (domain modules own and version prompts); [conformance report](../architecture/conformance-report.md) F-2
 - **Dependencies:** Owner approval of the proposal. **Must be settled (decision recorded and the nullable migration verified) before T-011 starts**, because T-011 forbids schema changes and the orchestrator would otherwise be revisited. T-020 follows this task.
@@ -41,3 +41,5 @@ The owner has recorded the decision; the migration is additive and reversible; r
 ## Review and approval
 Not requested. **Gate: always** (migration; contract; AI target).
 - 2026-11-21 stop 2: CP-2 approved and applied as spec revision 9 (D-36, AC-62, AC-63). Migration `0009_instructions_version`, model column and CHECK, `AiTaskRequest.instructions_version`, repository parameter, tests. Record with commands, counts and deviations: [stop 2 record](../reports/2026-11-21-T-019-instructions-version.md) (check.py 1762 passed, 4 skipped). The DB tests (17 new, deselected) have not run; AC-62 and AC-63 are `Implemented`, not `Verified`.
+- 2026-11-21 local DB suite, run by the owner with `/run-db-suite all`: exit 0, 217 passed (200 earlier plus 17 new), 0 failed, 1766 deselected, skipped not reported by the script, `cleanup done`. Local Postgres, not Neon. AC-63 `Verified`; AC-62 stays `Implemented` because the same-key different-label `Conflict` clause needs `submit` (T-011). Recorded in the [T-019 record](../reports/2026-11-21-T-019-instructions-version.md).
+- 2026-11-21 owner accepted T-019. T-011 may now start (its precondition, a settled `instructions_version`, is met).

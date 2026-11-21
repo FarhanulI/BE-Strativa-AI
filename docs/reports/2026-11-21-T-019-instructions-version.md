@@ -8,7 +8,7 @@
 | Date of execution | 2026-11-21 |
 | Environment | Local Windows, Python 3.12, `uv run`, DB-free. No database, no Redis (`TEST_REDIS_URL` unset for the gate), no Neon, no provider call. |
 | Commit | Spec revision 9 commit, then the implementation commit that carries this record; the code was uncommitted when the gate ran |
-| Run by | Agent session. The database suite is NOT RUN here (owner runs `/run-db-suite all`) |
+| Run by | Agent session. The database suite was run later the same day by the owner with `/run-db-suite all` (command 3) |
 
 ## Commands
 
@@ -16,16 +16,16 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `env -u TEST_REDIS_URL uv run python scripts/check.py` (ruff, mypy, `pytest -m "not db"`) | 0 | 1762 | 0 | 4 (the `redis`-marked tests, by design) | 0 |
 | 2 | `uv run ruff format --check` on the touched app, migration and test files | 0 | n/a | n/a | n/a | n/a |
-| 3 | `/run-db-suite all` | NOT RUN | n/a | n/a | n/a | n/a |
+| 3 | `bash scripts/run_db_suite.sh all` (via `/run-db-suite all`, local Postgres container `strativa-test-db`, `TEST_DB_MODE=local`) | 0 | 217 | 0 | not reported by the script | 0 |
 
-The previous gate count was 1730 passed (T-018). The 32 new DB-free tests are the label validation tests. 217 tests are deselected (the `db` tests; it was 200 before, so 17 new DB tests exist and are unexecuted).
+The previous gate count was 1730 passed (T-018). The 32 new DB-free tests are the label validation tests. 217 tests are deselected by command 1 (the `db` tests). Command 3 ran them: 217 passed (200 before this task plus 17 new), 1766 deselected (the DB-free tests), `cleanup done`. Local PostgreSQL, not Neon.
 
 ## Requirements covered
 
 | Requirement ID | Mapped tests that ran | Clause covered | Result | Proposed status |
 | --- | --- | --- | --- | --- |
-| AC-62 | `test_ai_platform_registries_types.py` (valid and invalid labels, the value never echoed), `test_request_repository_validation.py` (repository validation, no label on an embedding request) | Unit part: validation and no echo of the value | passed | Implemented. The DB part (CHECK refuses bad labels, round trip, embedding row null) is written and has NOT RUN. The same-key different-label `Conflict` clause needs `submit` (T-011) and is not covered |
-| AC-63 | `test_ai_platform_schema_metadata.py::test_alembic_has_a_single_head_after_instructions_version` (DB-free: one head, chain 0007, 0008, 0009) | Only the single-head and chain clause | passed | Implemented. Upgrade, downgrade, upgrade with an existing row and `alembic check` are written (`tests/db/test_ai_platform_schema.py`) and have NOT RUN |
+| AC-62 | `test_ai_platform_registries_types.py` (valid and invalid labels, the value never echoed), `test_request_repository_validation.py`, `tests/db/test_ai_platform_schema.py::test_ai_requests_check_constraints_reject_bad_rows`, `::test_instructions_version_accepts_null_and_valid_labels`, `tests/db/test_request_repository.py::test_insert_stores_the_instructions_version_label`, `::test_an_embedding_row_has_no_instructions_version` | Validation, no echo, CHECK refusal, round trip, embedding row null. NOT covered: the same-key different-label `Conflict` clause (needs `submit`, T-011) | passed | Implemented (not Verified: one clause of the requirement is untested) |
+| AC-63 | `test_ai_platform_schema_metadata.py::test_alembic_has_a_single_head_after_instructions_version`, `tests/db/test_ai_platform_schema.py::test_instructions_version_migration_keeps_existing_rows_and_is_reversible`, `::test_constraint_and_index_names_match_the_spec` | Whole requirement: nullable column and CHECK only, upgrade, downgrade and upgrade with an existing row, `alembic check` with no drift | passed | Verified (local PostgreSQL; the spec names no Neon scope) |
 
 ## Failures
 
@@ -33,7 +33,7 @@ None in the commands that ran.
 
 ## Not run
 
-`/run-db-suite all`: the migration, the CHECK constraint, the round-trip and the constraint-name test (`EXPECTED_CONSTRAINTS` now lists `ck_ai_requests_instructions_version`), plus the reversibility test. Nothing marks AC-62 or AC-63 `Verified` before that run.
+The idempotency `Conflict` clause of AC-62 (same key, different label): `submit` does not exist until T-011. A Neon run: none, and none is required by AC-62 or AC-63.
 
 ## Decisions and deviations
 
