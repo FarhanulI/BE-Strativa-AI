@@ -17,7 +17,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 
 from app.ai_platform import (
@@ -26,37 +25,24 @@ from app.ai_platform import (
     AiContextBlock,
     AiInputTooLarge,
     AiNoRoute,
-    AiPlatformConfig,
     AiProviderNotConfigured,
     AiTaskName,
     AiTaskNotReady,
-    AiTaskRegistry,
     AiTaskRequest,
     FakeAiProvider,
-    OutputSchemaRegistry,
 )
-from app.ai_platform.budget_coordinator import BudgetCoordinator
-from app.ai_platform.catalog import ModelCatalog
-from app.ai_platform.circuit_breaker import CircuitBreakerRegistry
-from app.ai_platform.orchestrator import ROUTING_VERSION, AiOrchestrator
-from app.core import FakeClock, Settings, ValidationFailed
+from app.ai_platform.orchestrator import ROUTING_VERSION
+from app.core import Settings, ValidationFailed
 from tests.helpers.ai_request_db_env import AiDbEnv, build_env
-from tests.helpers.char_estimator import CharCountEstimator
-from tests.helpers.synthetic_catalog import catalog_dict, chat_entry, embed_entry
+from tests.helpers.orchestrator_db import build_orchestrator
+from tests.helpers.synthetic_catalog import embed_entry
 
 pytestmark = pytest.mark.db
 
 TASK = AiTaskName.GENERATE_HOOK_VARIATIONS  # interactive, low cost class
 LABEL = "hooks.v3"
-SYNTHETIC_KEY = "synthetic-test-key-not-real"  # a placeholder, never a real credential
 # The estimate of the request below is a few hundred micro-USD; this limit is far below it.
 TINY_BUDGET_USD = "0.0001"
-
-
-class _Output(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    value: str = ""
 
 
 @pytest.fixture
@@ -79,38 +65,7 @@ async def env(migrated_test_schema: Settings) -> AsyncIterator[AiDbEnv]:
             await environment.engine.dispose()
 
 
-def _orchestrator(
-    env: AiDbEnv,
-    clock: FakeClock,
-    *,
-    entries: tuple[dict[str, Any], ...] | None = None,
-    key: str | None = SYNTHETIC_KEY,
-    budget_usd: str = "25",
-    schemas_ready: bool = True,
-) -> tuple[AiOrchestrator, FakeAiProvider]:
-    values: dict[str, Any] = {"workspace_monthly_budget_usd": budget_usd}
-    if key is not None:
-        values["gemini_api_key"] = key
-    config = AiPlatformConfig(_env_file=None, **values)
-    # The configured chat provider id is the only one the config can give a key for.
-    catalog = ModelCatalog.from_dict(catalog_dict(*(entries or (chat_entry(provider="gemini"),))))
-    schemas = OutputSchemaRegistry()
-    for task in AiTaskRegistry().list() if schemas_ready else ():
-        if task.output_schema_name is not None:
-            schemas.register(task.output_schema_name, 1, _Output)
-    provider = FakeAiProvider()
-    orchestrator = AiOrchestrator(
-        env.sessions,
-        config,
-        catalog,
-        clock,
-        CircuitBreakerRegistry(clock, config),
-        BudgetCoordinator(env.sessions, clock, config),
-        provider,
-        CharCountEstimator(),
-        schemas=schemas,
-    )
-    return orchestrator, provider
+_orchestrator = build_orchestrator
 
 
 def _request(task: AiTaskName = TASK, **overrides: Any) -> AiTaskRequest:
@@ -258,24 +213,3 @@ async def test_a_rejected_call_leaves_no_row_at_all(env: AiDbEnv) -> None:
     assert await _rows(env, workspace_id) == []
     assert await _usage_rows(env, workspace_id) == 0 and await _reserved(env, workspace_id) == 0
     assert provider.calls == ()
-
-
-async def test_a_routable_call_creates_a_running_row_before_anything_else(env: AiDbEnv) -> None:
-    """Spec 4.5 creation: ``mode='sync'``, ``running``, ``started_at = now``, lease and
-    idempotency columns NULL. Transitional: the provider call arrives in step 3, so the call
-    still stops at ``NotImplementedError`` and the row is left ``running`` (step 3 replaces it).
-    """
-    clock = env.clock()
-    workspace_id = await env.new_workspace()
-    orchestrator, provider = _orchestrator(env, clock)
-    with pytest.raises(NotImplementedError):
-        await orchestrator.run(
-            AiCallContext.for_worker(workspace_id=workspace_id, request_id="req-9"), _request()
-        )
-    (row,) = await _rows(env, workspace_id)
-    assert (row.mode, row.status, row.actor_type) == ("sync", "running", "worker")
-    assert row.started_at == clock.now() and row.completed_at is None and row.error_code is None
-    assert row.correlation_request_id == "req-9" and row.instructions_version == LABEL
-    assert row.output_schema_name == "HookVariationSet" and row.output_schema_version == 1
-    assert row.lease_epoch == 0 and row.idempotency_key is None and row.input_payload is None
-    assert await _usage_rows(env, workspace_id) == 0 and provider.calls == ()
