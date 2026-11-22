@@ -37,6 +37,7 @@ from app.ai_platform.orchestrator import (
 from app.ai_platform.requests import ImagePart, MediaRef, TextPart
 from app.core import FakeClock, ValidationFailed
 from app.workspace import WorkspaceContext, WorkspaceRole
+from tests.helpers.char_estimator import CharCountEstimator
 from tests.helpers.synthetic_catalog import catalog_dict
 
 INTERACTIVE = AiTaskName.GENERATE_HOOK_VARIATIONS
@@ -89,6 +90,7 @@ def _build(
         CircuitBreakerRegistry(clock, config),
         BudgetCoordinator(trap, clock, config),  # type: ignore[arg-type]
         provider,
+        CharCountEstimator(),
         schemas=schemas if schemas is not None else _all_schemas(),
     )
     return orchestrator, provider, trap
@@ -142,26 +144,23 @@ async def test_user_path_run_of_a_non_interactive_task_is_refused_with_the_fixed
     _assert_nothing_happened(provider, trap)
 
 
-async def test_user_path_run_of_the_interactive_task_passes_validation() -> None:
+def test_user_path_run_of_the_interactive_task_passes_validation() -> None:
     """AC-51: GENERATE_HOOK_VARIATIONS is interactive, so validation accepts a user context.
 
-    The routed part of ``run`` does not exist yet, so the call stops at NotImplementedError,
-    which proves validation did not reject it. The full success is tested in step 3.
+    The full ``run`` success is tested in step 3; the DB refusal paths in test_orchestrator_run.
     """
     orchestrator, provider, trap = _build()
-    with pytest.raises(NotImplementedError):
-        await orchestrator.run(_user_ctx(), _request(INTERACTIVE))
+    validated = orchestrator.validate_run(_user_ctx(), _request(INTERACTIVE))
+    assert validated.task.name is INTERACTIVE
     _assert_nothing_happened(provider, trap)
 
 
 @pytest.mark.parametrize("task", [NON_INTERACTIVE, BATCH, INTERACTIVE])
-async def test_worker_context_passes_validation_for_any_task(task: AiTaskName) -> None:
+def test_worker_context_passes_validation_for_any_task(task: AiTaskName) -> None:
     """AC-51: the same non-interactive task is allowed through ``for_worker``."""
     orchestrator, provider, trap = _build()
     validated = orchestrator.validate_run(_worker_ctx(), _request(task))
     assert validated.task.name is task
-    with pytest.raises(NotImplementedError):
-        await orchestrator.run(_worker_ctx(), _request(task))
     _assert_nothing_happened(provider, trap)
 
 

@@ -103,6 +103,8 @@ Boundaries: product code only under `app/ai_platform/`. Persistence stays inside
 
 ## Evidence
 - **Step 1 (2026-11-21):** `env -u TEST_REDIS_URL uv run python scripts/check.py` exit 0, 1781 passed, 0 failed, 4 skipped (redis), 217 deselected (db). Local Windows, DB-free. New: `app/ai_platform/orchestrator.py`, `tests/unit/ai_platform/test_orchestrator_validation.py` (19 tests). Two existing export-list tests were extended with `AiOrchestrator`. No requirement status changes yet (traceability is step 10).
+- **Step 2 (2026-11-22), DB-free part:** `env -u TEST_REDIS_URL uv run python scripts/check.py` exit 0, 1781 passed, 0 failed, 4 skipped (redis), 223 deselected (217 earlier db tests plus 6 new). New: row creation, Router call and refusal endings in `app/ai_platform/orchestrator.py`; `tests/db/test_orchestrator_run_refusals.py` (6 db tests). Two step-1 tests were changed from `run` to `validate_run` because `run` now reaches the database after validation. The 6 DB tests have NOT RUN: they need the owner's `/run-db-suite all`.
+- Step 2 judgment calls (owner to confirm): `UnitEstimator` is a constructor argument (the spec's estimator has no default implementation); `ROUTING_VERSION = "router-10.2-r1"` is a new constant (the spec fixes no value); a Router `modality_not_supported` result ends the row `no_route` (the spec lists no separate code) and still raises `AiModalityNotSupported`; the DB tests use a worker context because a user context needs a real `users` row for the foreign key.
 
 ## Review and approval
 Not requested. Owner approval is recorded elsewhere only for the spec revisions (T-006, 2026-11-19), not for this task.
