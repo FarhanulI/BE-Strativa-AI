@@ -27,7 +27,7 @@
 
 ## Standing rules (owner)
 
-- `docs/specs/` are the source of truth. Every module goes spec, implement, verify. Stop for owner review after each step. One agent at a time on a working copy. Commit and push after every step.
+- `docs/specs/` are the source of truth. Every module goes spec, implement, verify. Stop for owner review after each step. One agent at a time on a working copy.
 - Never run destructive commands (`rm -rf`, `git clean`, force push, dropping databases) without asking the owner.
 - Event payload keys never contain the word "token". No prompts, completions or user content in logs, events or error messages.
 - Tests run on a local Postgres container by default (`TEST_DB_MODE=local`, `APP_ENV=test`) and on the Neon test branch nightly. Never run tests against dev or production. SQLite is never a substitute.

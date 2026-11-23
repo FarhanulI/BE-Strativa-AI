@@ -2,7 +2,7 @@
 name: run-db-suite
 description: Runs the local Postgres container and the database test suite through the real test guard, then cleans up (manual use only).
 disable-model-invocation: true
-argument-hint: [all | tests/db/<file>.py]
+argument-hint: "[all | tests/db/<file>.py]"
 allowed-tools: Bash(bash scripts/run_db_suite.sh *)
 ---
 

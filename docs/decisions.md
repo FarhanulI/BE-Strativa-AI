@@ -66,7 +66,7 @@ SDD-D-1 to SDD-D-4 were made by the owner on **2026-11-19** and are recorded as 
 - **Consequences:**
   - Routine tasks inside an approved milestone may proceed without asking after each small action.
   - Work stops for owner review at the end of each milestone, and the next milestone does not start without owner approval.
-  - The existing requirement to commit and push after each logical change is unchanged (see Standing rules in [.github/copilot-instructions.md](../.github/copilot-instructions.md)).
+  - The existing requirement to after each logical change is unchanged (see Standing rules in [.github/copilot-instructions.md](../.github/copilot-instructions.md)).
 
 ### SDD-D-5: Module-prefixed requirement identifiers
 

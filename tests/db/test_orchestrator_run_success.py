@@ -5,8 +5,9 @@ effective output cap), D-22 (the configured key is passed explicitly), AC-22 (st
 before anything is returned), AC-29 (``run`` part: ``free_tier`` metering at catalog price and the
 ``ai_requests`` totals), INV-7 (the reservation is released once at settlement), INV-8 (invalid
 output is never returned or stored), spec 4.5 (row lifecycle, ``persist_result``) and the ``run``
-side of AC-62. A first call that does not succeed is settled ``failed`` and stops at
-``NotImplementedError`` (fallback and repair are steps 4 to 6). Synthetic text only.
+side of AC-62. With one candidate a call that does not succeed is settled ``failed`` and ends the
+request (fallback with several candidates is in test_orchestrator_run_fallback.py). Synthetic text
+only.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ from sqlalchemy import text
 from app.ai_platform import (
     AiBudgetExceeded,
     AiCallContext,
+    AiOutputInvalid,
+    AiProviderUnavailable,
     AiTaskName,
     AiTaskRequest,
     ScriptedResponse,
@@ -259,12 +262,12 @@ async def test_invalid_output_is_never_returned_or_stored_and_the_attempt_is_set
 ) -> None:
     """INV-8, AC-22: strict validation fails -> no result, no payload; the usage row is settled
     ``failed`` with counts and type names only, and the reservation is released (INV-7).
-    Repair and fallback are steps 4 to 6, so the call stops at ``NotImplementedError``."""
+    One candidate and no repair yet (step 6), so the request ends ``AiOutputInvalid``."""
     workspace_id = await env.new_workspace()
     bad = json.dumps({"value": 5, "extra": "zz-sentinel-output-3391"})
     orchestrator, _ = build_orchestrator(env, env.clock(), script=[_ok(bad)])
     ctx = AiCallContext.for_worker(workspace_id=workspace_id, request_id="r")
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(AiOutputInvalid):
         await orchestrator.run(ctx, _request(persist_result=True))
     (usage,) = await _usage_rows(env, workspace_id)
     assert usage.status == "failed" and usage.error_code == "output_invalid"
@@ -277,7 +280,8 @@ async def test_invalid_output_is_never_returned_or_stored_and_the_attempt_is_set
     )
     assert "zz-sentinel-output-3391" not in json.dumps([str(v) for v in usage], default=str)
     row = await _request_row(env, workspace_id)
-    assert row.output_payload is None and row.status == "running"
+    assert row.output_payload is None and row.status == "failed"
+    assert row.error_code == "output_invalid"
     budget = await _budget(env, workspace_id)
     assert (budget.reserved_micro_usd, budget.spent_micro_usd) == (0, EXPECTED_COST)
 
@@ -302,7 +306,7 @@ async def test_a_failed_first_call_is_settled_with_reported_usage_only(
     workspace_id = await env.new_workspace()
     orchestrator, _ = build_orchestrator(env, env.clock(), script=[scripted])
     ctx = AiCallContext.for_worker(workspace_id=workspace_id, request_id="r")
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(AiProviderUnavailable):
         await orchestrator.run(ctx, _request())
     (usage,) = await _usage_rows(env, workspace_id)
     assert usage.status == "failed" and usage.error_code == code

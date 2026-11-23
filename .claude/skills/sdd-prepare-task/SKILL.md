@@ -12,4 +12,4 @@ Prepare a task. Follow [docs/sdd.md](../../../docs/sdd.md) sections 4 and 5. The
 3. Fill: module and phase, requirement IDs (valid, existing), spec references, objective, scope, explicit non-goals, dependencies, implementation expectations, required tests, verification requirements (including the environment; Neon only under a separate authorization), acceptance criteria.
 4. Set the state to `Proposed`. If a named dependency or authorization is missing, set `Blocked` and name it.
 5. Add the task to the index in `docs/tasks/README.md`.
-6. Commit and push the task with a message citing the task ID. Then stop and ask the owner to approve it as `Ready`.
+6. write a Commit message of the task citing the task ID. Then stop and ask the owner to approve it as `Ready`.

@@ -11,5 +11,5 @@ Implement one task. Follow [docs/sdd.md](../../../docs/sdd.md) and the repositor
 3. Set the task `In Progress`. Work only inside its scope and non-goals. Respect module boundaries (public interfaces and events only).
 4. Write or update tests for each applicable acceptance criterion. Name or tag tests so the requirement ID is traceable (for example in the docstring).
 5. Update `docs/traceability.md`: Implementation and Test references for each ID, status `Implemented`. Never set `Verified` here.
-6. Set the task `Implemented`. Commit and push after each logical step; commit messages cite the task and requirement IDs.
+6. Set the task `Implemented`.
 7. Hand over to `sdd-verify`. Do not run the database suite except through `/run-db-suite`, and never run Neon.

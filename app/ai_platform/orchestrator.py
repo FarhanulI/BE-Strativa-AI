@@ -6,9 +6,14 @@ Router or the budget refuses ends the row ``failed`` with its ``error_code``, le
 and no reservation, and raises the error class of ``errors.py``.
 Step 3: one provider call on the first candidate: reserve the Router estimate unchanged (D-24),
 call with no open transaction, the effective output cap (D-31) and the configured key (D-22),
-validate strictly, settle, finish the row. A first call that does not succeed is settled
-``failed`` and then stops at ``NotImplementedError``: fallback, repair and the deadline stop
-arrive in steps 4 to 6 (the request row stays ``running`` until then).
+validate strictly, settle, finish the row.
+Step 4: fallback in rank order (spec 10.3). Every failed attempt is settled ``failed`` with its
+``error_code`` and the next candidate is tried, up to ``max_provider_attempts`` distinct models.
+Bad request and content refusal end the request at once. When the candidates or the attempt cap
+are used up the error comes from ``final_error`` (D-32, observed behavior). When the time left
+is below the next candidate's median latency the request fails ``provider_timeout``. A strict
+validation failure falls back without a repair call until step 6; the circuit breaker is used
+from step 5.
 
 The orchestrator never names a provider or model, and never puts request content into an error.
 """
@@ -35,9 +40,21 @@ from app.ai_platform.circuit_breaker import CircuitBreakerRegistry
 from app.ai_platform.config import AiPlatformConfig
 from app.ai_platform.context import AiCallContext
 from app.ai_platform.enums import AiModality, LatencyClass, TaskScope
-from app.ai_platform.errors import AiBudgetExceeded, AiErrorCode, AiModalityNotSupported
+from app.ai_platform.errors import (
+    AiBudgetExceeded,
+    AiErrorCode,
+    AiModalityNotSupported,
+    AiProviderUnavailable,
+)
 from app.ai_platform.estimator import UnitEstimator
-from app.ai_platform.failure_policy import ProviderFailureKind, classify
+from app.ai_platform.failure_policy import (
+    ProviderFailureKind,
+    classify,
+    deadline_stop_error_code,
+    final_error,
+    next_attempt_allowed,
+    terminal_error_class,
+)
 from app.ai_platform.messages import build_generation_messages
 from app.ai_platform.pricing import cost_micro_usd
 from app.ai_platform.provider import (
@@ -107,6 +124,7 @@ class AttemptResult:
     output_units: int
     cost_micro_usd: int
     error_code: AiErrorCode | None
+    kind: ProviderFailureKind | None
 
 
 class AiOrchestrator:
@@ -175,19 +193,49 @@ class AiOrchestrator:
         if routing.failure is not None:
             await self._refuse(ctx, validated, request_id, routing, routing.failure)
 
-        candidate = routing.candidates[0]
+        attempts: list[AttemptResult] = []
+        failures: list[ProviderFailureKind] = []
+        cap = self._config.max_provider_attempts
         try:
-            attempt = await self._attempt(
-                ctx, request, validated, request_id, routing, candidate, messages, started_at
-            )
+            for index, candidate in enumerate(routing.candidates[:cap]):
+                if index > 0 and not self._may_try_next(candidate, started_at, validated, index):
+                    await self._end_failed(
+                        request_id, deadline_stop_error_code(), routing.routing_version
+                    )
+                    raise AiProviderUnavailable()
+                attempt = await self._attempt(
+                    ctx,
+                    request,
+                    validated,
+                    request_id,
+                    routing,
+                    candidate,
+                    messages,
+                    started_at,
+                    attempt_no=len(attempts) + 1,
+                )
+                attempts.append(attempt)
+                if attempt.kind is None:
+                    break
+                failures.append(attempt.kind)
+                if classify(attempt.kind).terminal_on_first_failure:
+                    await self._end_failed(
+                        request_id, classify(attempt.kind).error_code, routing.routing_version
+                    )
+                    raise terminal_error_class(attempt.kind)()
         except AiBudgetExceeded:
             # The atomic reservation refused the call; its refusal was already recorded (D-33).
+            # Budget exhaustion never falls back (spec 10.3).
             await self._end_failed(request_id, AiErrorCode.BUDGET_EXCEEDED, routing.routing_version)
             raise
-        if attempt.output is None:
-            raise NotImplementedError("fallback and repair are added in T-011 steps 4 to 6")
 
-        output = attempt.output
+        last = attempts[-1]
+        if last.output is None:
+            ended = final_error(failures)
+            await self._end_failed(request_id, ended.error_code, routing.routing_version)
+            raise ended.error_class()
+
+        output = last.output
         await self._end_succeeded(request_id, request, output, routing.routing_version)
         return AiTaskResult(
             request_id=request_id,
@@ -196,12 +244,27 @@ class AiOrchestrator:
             output_schema_name=_required(validated.task.output_schema_name),
             output_schema_version=validated.output_schema_version,
             usage=AiUsageSummary(
-                input_units=attempt.input_units,
-                output_units=attempt.output_units,
-                cost_micro_usd=attempt.cost_micro_usd,
-                call_count=1,
+                input_units=sum(a.input_units for a in attempts),
+                output_units=sum(a.output_units for a in attempts),
+                cost_micro_usd=sum(a.cost_micro_usd for a in attempts),
+                call_count=len(attempts),
             ),
-            routing_id=attempt.usage_record_id,
+            routing_id=last.usage_record_id,
+        )
+
+    def _may_try_next(
+        self, candidate: RoutedModel, started_at: datetime, validated: ValidatedRun, tried: int
+    ) -> bool:
+        """The deadline rule of spec 10.3: the time left must cover the next model's p50."""
+        remaining = (
+            self._config.deadline_seconds(validated.task.latency)
+            - (self._clock.now() - started_at).total_seconds()
+        )
+        return next_attempt_allowed(
+            tried,
+            self._config.max_provider_attempts,
+            max(0, int(remaining * 1000)),
+            self._entry(candidate).latency_p50_ms,
         )
 
     async def _attempt(
@@ -214,6 +277,8 @@ class AiOrchestrator:
         candidate: RoutedModel,
         messages: tuple[ChatMessage, ...],
         started_at: datetime,
+        *,
+        attempt_no: int,
     ) -> AttemptResult:
         """Reserve, call and settle once: three separate steps, no transaction open in the call."""
         task = validated.task
@@ -234,7 +299,7 @@ class AiOrchestrator:
             candidate.estimated_cost_micro_usd,
             ReservationParams(
                 request_id=request_id,
-                attempt_no=1,
+                attempt_no=attempt_no,
                 task=task.name.value,
                 call_kind="generation",
                 provider=candidate.provider,
@@ -329,6 +394,7 @@ class AiOrchestrator:
             output_units=output_units,
             cost_micro_usd=cost,
             error_code=error_code,
+            kind=kind,
         )
 
     def _entry(self, candidate: RoutedModel) -> CatalogModel:

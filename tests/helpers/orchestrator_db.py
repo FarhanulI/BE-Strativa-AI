@@ -49,6 +49,7 @@ def build_orchestrator(
     schemas_ready: bool = True,
     script: Iterable[ScriptedResponse] = (),
     coordinator_factory: Callable[..., BudgetCoordinator] = BudgetCoordinator,
+    provider: FakeAiProvider | None = None,
 ) -> tuple[AiOrchestrator, FakeAiProvider]:
     values: dict[str, Any] = {"workspace_monthly_budget_usd": budget_usd}
     if key is not None:
@@ -61,7 +62,7 @@ def build_orchestrator(
     for task in AiTaskRegistry().list() if schemas_ready else ():
         if task.output_schema_name is not None:
             schemas.register(task.output_schema_name, 1, OutputForTests)
-    provider = FakeAiProvider(script)
+    provider = provider if provider is not None else FakeAiProvider(script)
     orchestrator = AiOrchestrator(
         env.sessions,
         config,

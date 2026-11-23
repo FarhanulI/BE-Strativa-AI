@@ -44,4 +44,4 @@ Not touched: Router, failure policy, message builder, breaker, `BudgetCoordinato
 1. Approve the 4.2 text above as spec revision 10?
 2. Approve the T-011 scope extension to `budget_repository.py` and its tests, as listed?
 
-On approval I apply revision 10 (spec header, revision note, `docs/decisions.md` or traceability only if the spec's own rules require it), make the change, record the failed step-3 run honestly in the task Evidence, run the DB-free gate, commit and push, and ask you to type `/run-db-suite all`.
+On approval I apply revision 10 (spec header, revision note, `docs/decisions.md` or traceability only if the spec's own rules require it), make the change, record the failed step-3 run honestly in the task Evidence, run the DB-free gate and ask you to type `/run-db-suite all`.

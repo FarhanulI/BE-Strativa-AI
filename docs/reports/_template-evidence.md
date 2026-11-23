@@ -69,4 +69,4 @@ This note is guidance inside the template. It does not replace the `sdd-verify` 
 
    where `<env>` is a short label such as `local-db-free`, `local-postgres` or `ci`, `<file>` is this record's file name and `<anchor>` is the heading of the section that proves the row (for example `#requirements-covered`). A row without such a link is not `Verified`.
 6. List every unexecuted item under Not run. Never write "should pass", "presumably" or "expected to pass".
-7. Commit and push the record with the traceability change, citing the task and requirement IDs.
+7. Write Commit message of the record with the traceability change, citing the task and requirement IDs.

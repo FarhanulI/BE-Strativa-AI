@@ -49,7 +49,7 @@ Safety, environment, database and repository rules in the Standing rules of [.gi
 2. **Requirement IDs.** List the IDs the work satisfies or changes. If none apply, the spec needs a change first (section 7).
 3. **Traceability.** Confirm each ID has a row in [traceability.md](traceability.md); add rows for new IDs with status `Specified`.
 4. **Task.** Create or update a task file (section 5) and obtain its `Ready` state. Substantial implementation does not start without a `Ready` task. A one-line typo fix or doc link repair does not need a task.
-5. **Implementation.** Work only inside the task scope. Keep module boundaries (public interfaces and domain events only). Commit and push after each logical step with a message that cites the task and requirement IDs.
+5. **Implementation.** Work only inside the task scope. Keep module boundaries (public interfaces and domain events only). Write Commit message after each logical step that cites the task and requirement IDs.
 6. **Tests.** Add or update tests for each applicable acceptance criterion. Tests that cross a module or tenant boundary need isolation coverage. The database suite runs only through `/run-db-suite`. Neon runs only in a separately authorized task.
 7. **Evidence.** Execute the tests. Record the actual result with date, command or skill used, environment and counts in the task and in [traceability.md](traceability.md). Never record a result that was not produced.
 8. **Review.** The owner reviews at milestone level (SDD-D-4), except for the task categories that section 9 reviews per task (SDD-D-8). An independent audit (section 11) precedes owner review.
