@@ -223,19 +223,21 @@ async def test_persist_result_stores_the_output_only_when_asked(env: AiDbEnv) ->
     workspace_id = await env.new_workspace()
     orchestrator, _ = build_orchestrator(env, env.clock(), script=[_ok(), _ok()])
     ctx = AiCallContext.for_worker(workspace_id=workspace_id, request_id="r")
-    await orchestrator.run(ctx, _request(persist_result=True))
-    await orchestrator.run(ctx, _request())
+    stored = await orchestrator.run(ctx, _request(persist_result=True))
+    not_stored = await orchestrator.run(ctx, _request())
     async with env.sessions() as session, session.begin():
         rows = (
             await session.execute(
-                text(
-                    "SELECT output_payload FROM ai_requests WHERE workspace_id = :w "
-                    "ORDER BY created_at"
-                ),
+                text("SELECT id, output_payload FROM ai_requests WHERE workspace_id = :w"),
                 {"w": workspace_id},
             )
         ).all()
-    assert [r.output_payload for r in rows] == [json.loads(VALID_OUTPUT_JSON), None]
+    # Both rows share one fake-clock timestamp, so each is matched by its own request id.
+    payloads = {r.id: r.output_payload for r in rows}
+    assert payloads == {
+        stored.request_id: json.loads(VALID_OUTPUT_JSON),
+        not_stored.request_id: None,
+    }
 
 
 async def test_missing_provider_usage_falls_back_to_the_estimator(env: AiDbEnv) -> None:
