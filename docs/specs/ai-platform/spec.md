@@ -2,8 +2,8 @@
 
 - **Module:** ai_platform
 - **Phase:** 2 — AI & Knowledge Platform
-- **Specification status:** Approved at revision 4 (date not stated), at revisions 5, 6 and 7 (owner decision, this conversation, 2026-11-19) at revision 8 (owner decision on change proposal CP-1, 2026-11-20) and at revision 9 (owner decision on change proposal CP-2, 2026-11-21; see below).
-- **Revision:** Content is at revision 9. Revision 9 applies [CP-2](change-proposals/CP-2-instructions-version.md) (task T-019): the `instructions_version` label on `ai_requests` and `AiTaskRequest`, decision D-36, AC-62 and AC-63, in sections 4.1, 5.1, 12.4, 17.5 and 20.1 only. No numbering changed. Revision 8 applies [CP-1](change-proposals/CP-1-catalog-verification-fields.md) (task T-018): the catalog verification fields, the loader refusal of unverified entries and the per-task `task_min_input_units` of AC-60, in sections 10.1 and 17.5 only. No numbering changed.
+- **Specification status:** Approved at revision 4 (date not stated), at revisions 5, 6 and 7 (owner decision, this conversation, 2026-11-19) at revision 8 (owner decision on change proposal CP-1, 2026-11-20) and at revision 9 (owner decision on change proposal CP-2, 2026-11-21) and at revision 10 (owner decision on change proposal CP-3, 2026-11-23; see below).
+- **Revision:** Content is at revision 10. Revision 10 applies [CP-3](change-proposals/CP-3-candidate-snapshot-provider.md) (task T-011): `provider` is added to the `candidate_snapshot` entries of section 4.2, which now agrees with 10.5, in section 4.2 only. No numbering changed. Revision 9 applies [CP-2](change-proposals/CP-2-instructions-version.md) (task T-019): the `instructions_version` label on `ai_requests` and `AiTaskRequest`, decision D-36, AC-62 and AC-63, in sections 4.1, 5.1, 12.4, 17.5 and 20.1 only. No numbering changed. Revision 8 applies [CP-1](change-proposals/CP-1-catalog-verification-fields.md) (task T-018): the catalog verification fields, the loader refusal of unverified entries and the per-task `task_min_input_units` of AC-60, in sections 10.1 and 17.5 only. No numbering changed.
 - **Approval status:** Revision 4: owner approval explicitly recorded in the Status paragraph below (approval date: Not stated). Revisions 5 to 7 (D-24 to D-35, AC-59 and the related text): approved by the owner on 2026-11-19, recorded as "owner decision, this conversation" (task T-006 in [docs/tasks/](../../tasks/README.md)). This records approval only. No requirement text was changed, no earlier approval evidence exists for these revisions, and D-32 and D-20 remain unresolved (T-004, T-005).
 - **Identifier scheme:** `INV-n`, `AC-n`, `D-n` and `OQ-n` are unprefixed and are preserved exactly (SDD-D-5). D-32 is referenced by code and tests but has no entry in section 20.1; D-20 has no revision stated. Both are unresolved historical discrepancies recorded in [decisions.md](../../decisions.md), not fixed here.
 - **Metadata added by the SDD migration.** The Status paragraph below is the original text and is unchanged.
@@ -174,7 +174,7 @@ Indexes:
 | `billing_mode` | text not null | `free_tier` \| `paid`, derived at call time from the provider's configuration (10.1), not from the catalog. All calls of one request have the same value (INV-29). |
 | `routing_version` | text not null | |
 | `route_rank` | int not null | 1 = the Router's first choice |
-| `candidate_snapshot` | jsonb not null | ordered list of `{model, eligible, reason_code}` (ids and codes only, no content) |
+| `candidate_snapshot` | jsonb not null | ordered list of `{provider, model, eligible, reason_code}` (ids and codes only, no content), exactly the Router snapshot of 10.5 (rev 10, CP-3) |
 | `status` | text not null | `reserved` \| `succeeded` \| `failed` \| `abandoned` |
 | `error_code` | text null | |
 | `finish_reason` | text null | `stop` \| `length` \| `content_filter` \| other provider value |

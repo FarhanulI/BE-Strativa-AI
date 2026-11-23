@@ -206,6 +206,14 @@ async def test_insert_reserved_rejects_invalid_fields(overrides: dict[str, Any])
         await repo.insert_reserved_usage_record(SESSION, _record(**overrides))
 
 
+async def test_snapshot_entries_with_provider_are_accepted_by_validation() -> None:
+    """CP-3 (spec 4.2, rev 10): ``provider`` is an allowed key, so the Router snapshot passes
+    validation. The bare session is then used, which raises AttributeError (not ValueError)."""
+    entry = {"provider": "gemini", "model": "m", "eligible": True, "reason_code": None}
+    with pytest.raises(AttributeError):
+        await repo.insert_reserved_usage_record(SESSION, _record(candidate_snapshot=[entry]))
+
+
 def test_reserved_record_is_frozen() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         _record().reserved_micro_usd = 1  # type: ignore[misc]
@@ -237,16 +245,19 @@ async def test_settle_usage_record_rejects_bad_input(overrides: dict[str, Any]) 
         await repo.settle_usage_record(SESSION, **_settle_args(**overrides))
 
 
-@pytest.mark.parametrize("overrides", [
-    {"outcome": "abandoned"},
-    {"cost_micro_usd": -1},
-    {"reserved_estimate_micro_usd": -1},
-    {"reserved_estimate_micro_usd": True},
-    {"limit_micro_usd": -1},
-    {"limit_micro_usd": 1.5},
-    {"budget_row_id": "x"},
-    {"now": datetime(2026, 11, 3, 12, 0)},
-])
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"outcome": "abandoned"},
+        {"cost_micro_usd": -1},
+        {"reserved_estimate_micro_usd": -1},
+        {"reserved_estimate_micro_usd": True},
+        {"limit_micro_usd": -1},
+        {"limit_micro_usd": 1.5},
+        {"budget_row_id": "x"},
+        {"now": datetime(2026, 11, 3, 12, 0)},
+    ],
+)
 async def test_settle_rejects_bad_input(overrides: dict[str, Any]) -> None:
     with pytest.raises(ValueError):
         await repo.settle(SESSION, **_settle_full_args(**overrides))

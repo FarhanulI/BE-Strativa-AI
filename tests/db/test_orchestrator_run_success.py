@@ -178,6 +178,11 @@ async def test_successful_call_returns_a_validated_result_and_settles_one_usage_
     assert usage.billing_mode == "free_tier"  # AC-29: metered at catalog price in both modes
     assert usage.routing_version == ROUTING_VERSION and usage.schema_valid is True
     assert usage.finish_reason == "stop" and usage.finished_at is not None
+    # CP-3 (spec 4.2 rev 10, 10.5): the stored snapshot is the Router's, provider included.
+    (entry,) = usage.candidate_snapshot
+    assert set(entry) == {"provider", "model", "eligible", "reason_code"}
+    assert entry["provider"] == "gemini" and entry["eligible"] is True
+    assert entry["model"] == usage.model and entry["reason_code"] is None
 
     # Settlement released the reservation exactly once and added the actual cost (INV-7).
     budget = await _budget(env, workspace_id)

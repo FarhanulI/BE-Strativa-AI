@@ -44,7 +44,7 @@ _SCOPES = ("workspace", "system")
 _OUTCOMES = ("succeeded", "failed")
 _CALL_KINDS = ("generation", "repair", "embedding")
 _BILLING_MODES = ("free_tier", "paid")
-_SNAPSHOT_KEYS = frozenset({"model", "eligible", "reason_code"})
+_SNAPSHOT_KEYS = frozenset({"provider", "model", "eligible", "reason_code"})  # spec 4.2, rev 10
 _BIGINT_MAX = 2**63 - 1
 
 
@@ -416,7 +416,9 @@ def _validate_reserved_record(record: ReservedUsageRecord) -> None:
         raise ValueError("candidate_snapshot must be a list of entries")
     for entry in snapshot:
         if not isinstance(entry, Mapping) or not set(entry) <= _SNAPSHOT_KEYS:
-            raise ValueError("candidate_snapshot entries allow only model, eligible, reason_code")
+            raise ValueError(
+                "candidate_snapshot entries allow only provider, model, eligible, reason_code"
+            )
         for value in entry.values():
             if value is not None and not isinstance(value, (str, bool)):
                 raise ValueError("candidate_snapshot values must be ids and codes only")
