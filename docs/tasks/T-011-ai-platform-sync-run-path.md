@@ -1,7 +1,7 @@
 # T-011: AI Platform synchronous `run` path (fake provider)
 
 - **Module and phase:** ai_platform, Phase 2 (sub-task of T-008, part (b))
-- **State:** In Progress (plan approved by the owner with "start step 1", 2026-11-21)
+- **State:** Implemented (2026-11-24: steps 1 to 10 done and committed, `spec-auditor` run, open items moved to [T-023](T-023-ai-platform-run-followups.md); awaiting owner result review and acceptance). Plan was approved by the owner with "start step 1", 2026-11-21.
 - **Requirement IDs:** (all exist in the spec and the traceability matrix; coverage is limited to the `run` path unless stated. Completing the `run` clause of a criterion does not make the whole criterion verified.)
   - Invariants: INV-4 (`run` path only; the `execute_request` and `embed_texts` paths stay open), INV-6, INV-7, INV-8, INV-9, INV-23, INV-24, INV-26, INV-29 (`run` path only).
   - Acceptance criteria:
