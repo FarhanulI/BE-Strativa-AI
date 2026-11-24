@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.ai_platform import (
     AiPlatformConfig,
@@ -52,7 +53,11 @@ def build_orchestrator(
     provider: FakeAiProvider | None = None,
     breaker_factory: Callable[..., CircuitBreakerRegistry] = CircuitBreakerRegistry,
     config_values: dict[str, Any] | None = None,
+    sessions: async_sessionmaker[AsyncSession] | None = None,
 ) -> tuple[AiOrchestrator, FakeAiProvider]:
+    """``sessions`` replaces the environment's session factory for the orchestrator and its budget
+    coordinator (step 8 gives them their own engine with a recognizable ``application_name``)."""
+    own_sessions = sessions if sessions is not None else env.sessions
     values: dict[str, Any] = {"workspace_monthly_budget_usd": budget_usd, **(config_values or {})}
     if key is not None:
         values["gemini_api_key"] = key
@@ -66,12 +71,12 @@ def build_orchestrator(
             schemas.register(task.output_schema_name, 1, OutputForTests)
     provider = provider if provider is not None else FakeAiProvider(script)
     orchestrator = AiOrchestrator(
-        env.sessions,
+        own_sessions,
         config,
         catalog,
         clock,
         breaker_factory(clock, config),
-        coordinator_factory(env.sessions, clock, config),
+        coordinator_factory(own_sessions, clock, config),
         provider,
         CharCountEstimator(),
         schemas=schemas,
