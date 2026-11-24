@@ -22,12 +22,19 @@ model (spec 11): a new reservation from the repair messages, skipped without a c
 exceeds the task's cost-class ceiling (D-34), no time is left or the breaker denies the model.
 A truncated output is never repaired. The attempt cap counts distinct models, so a request makes
 at most ``max_provider_attempts * (1 + max_repair_attempts)`` calls (INV-9).
+T-023: any exception after the request row exists (an unexpected provider error, a failure while
+settling, a cancellation) ends the row ``failed`` with ``execution_abandoned`` and abandons an
+in-flight reservation at its estimate (INV-7, INV-14), then re-raises the original exception
+unchanged. The cleanup is shielded from cancellation and is idempotent; if it fails, the reaper
+(spec 4.5, 8.2) remains the backstop.
 
 The orchestrator never names a provider or model, and never puts request content into an error.
 """
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, NoReturn
@@ -41,6 +48,7 @@ from app.ai_platform import request_repository as request_repo
 from app.ai_platform.budget_coordinator import (
     BudgetCoordinator,
     ReservationParams,
+    ReservationResult,
     SettlementOutcome,
 )
 from app.ai_platform.catalog import CatalogModel, ModelCatalog
@@ -197,6 +205,23 @@ class AiOrchestrator:
         started_at = self._clock.now()
         request_id = await self._create_row(ctx, request, validated)
 
+        try:
+            return await self._run_routed(ctx, request, validated, request_id, started_at)
+        except BaseException:
+            # T-023 (D-A, D-C, D-D): end a row that is still running, then re-raise unchanged.
+            # A deliberate ending already completed the row, so this is then a no-op.
+            await self._fail_open_request(request_id)
+            raise
+
+    async def _run_routed(
+        self,
+        ctx: AiCallContext,
+        request: AiTaskRequest,
+        validated: ValidatedRun,
+        request_id: UUID,
+        started_at: datetime,
+    ) -> AiTaskResult:
+        """Route, attempt, validate and finish a request whose row already exists."""
         parts_text = [part.text for part in request.parts if isinstance(part, TextPart)]
         messages, marker = build_generation_messages(
             request.instructions, request.context, parts_text
@@ -461,6 +486,39 @@ class AiOrchestrator:
             ),
         )
 
+        try:
+            return await self._call_and_settle(
+                task,
+                entry,
+                schema,
+                candidate,
+                messages,
+                started_at,
+                handle,
+                reservation,
+                reserve_micro_usd,
+            )
+        except BaseException:
+            # T-023 (D-B): the call was reserved but not settled. Abandon it at its estimate
+            # (INV-14) so no reservation is left behind, then re-raise unchanged. A record that
+            # was settled meanwhile is left alone.
+            await self._finish_shielded(self._budgets.abandon_call(reservation.usage_record_id))
+            raise
+
+    async def _call_and_settle(
+        self,
+        task: AiTaskDefinition,
+        entry: CatalogModel,
+        schema: type[BaseModel],
+        candidate: RoutedModel,
+        messages: tuple[ChatMessage, ...],
+        started_at: datetime,
+        handle: AttemptHandle,
+        reservation: ReservationResult,
+        reserve_micro_usd: int,
+    ) -> AttemptResult:
+        """The provider call and the settlement of one reserved attempt (no transaction open
+        during the call)."""
         remaining = (
             self._config.deadline_seconds(task.latency)
             - (self._clock.now() - started_at).total_seconds()
@@ -554,6 +612,35 @@ class AiOrchestrator:
             ),
             issues=outcome.issues if outcome is not None and not outcome.ok else (),
         )
+
+    async def _fail_open_request(self, request_id: UUID) -> None:
+        """End the row ``failed`` with ``execution_abandoned`` if it is still ``running``.
+
+        The completion is one conditional UPDATE, so a row that was already ended (a deliberate
+        refusal or failure) is left as it is. Shielded from cancellation (T-023 D-D).
+        """
+        await self._finish_shielded(
+            self._end_failed(request_id, AiErrorCode.EXECUTION_ABANDONED, ROUTING_VERSION)
+        )
+
+    @staticmethod
+    async def _finish_shielded(work: Awaitable[object]) -> None:
+        """Run cleanup to completion even when the calling task is cancelled meanwhile.
+
+        Further cancellations are held until the cleanup is done; the caller re-raises the
+        original exception afterwards. An error in the cleanup itself is dropped, because the
+        original exception matters more and the reaper (spec 4.5) cleans up what is left.
+        """
+        inner = asyncio.ensure_future(work)
+        while not inner.done():
+            try:
+                await asyncio.shield(inner)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        if inner.done() and not inner.cancelled():
+            inner.exception()  # mark a dropped error as retrieved
 
     def _entry(self, candidate: RoutedModel) -> CatalogModel:
         for entry in self._catalog.models():

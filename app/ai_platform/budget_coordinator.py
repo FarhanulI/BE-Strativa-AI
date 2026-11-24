@@ -281,6 +281,19 @@ class BudgetCoordinator:
             )
         return result
 
+    async def abandon_call(self, usage_record_id: UUID) -> bool:
+        """Abandon one ``reserved`` usage record in ONE transaction (spec 8.2, INV-14).
+
+        For a call whose caller failed before it could settle (T-023): the record becomes
+        ``abandoned`` at its reserved estimate, and that amount moves from the budget row's
+        ``reserved`` to its ``spent`` in the same statement. A record that is no longer
+        ``reserved`` changes nothing. Returns True only if this call abandoned the record. No event
+        and no log record is written.
+        """
+        now = self._clock.now()
+        async with self._sessions() as session, session.begin():
+            return await repo.abandon_usage_record(session, usage_record_id, now)
+
     # ----------------------------------------------------------------------------------------
     # Event and audit (always inside the caller's open transaction)
     # ----------------------------------------------------------------------------------------
