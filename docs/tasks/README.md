@@ -27,6 +27,7 @@ A task is a bounded, owner-approved unit of work. The process, lifecycle and rul
 | [T-019](T-019-instructions-version.md) | `instructions_version` on AI requests: proposal, then nullable migration | ai_platform / 2 | Accepted | Owner approval; must be settled before T-011 starts |
 | [T-020](T-020-ai-metric-views.md) | DB-derived AI metric views (p50/p95 latency, cost, error rate by provider, model, `instructions_version`) | ai_platform / 2 | Proposed | T-019 |
 | [T-021](T-021-generated-data-model.md) | Generated `data-model.md` and drift gate | db_migrations / 0 | Proposed | T-013 |
+| [T-022](T-022-circuit-breaker-probe-ownership.md) | Circuit breaker probe ownership and lease (D-37; AC-64, AC-65) | ai_platform / 2 | Ready | CP-4 applied as spec revision 11; made Ready by the owner 2026-11-24; checkpoints 2 (failing H1 tests, approved) and 3 (registry ownership and lease, DB-free gate green) done; checkpoint 3 awaiting owner review. Independent of T-011, whose scope and record are unchanged |
 
 No task exists for a module that has no specification. Exception recorded for T-013: it is verification infrastructure for T-002 and T-003 and does not implement the `delivery` module.
 

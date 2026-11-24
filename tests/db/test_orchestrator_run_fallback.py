@@ -3,8 +3,9 @@
 Covers spec 10.3 (the classification table, fallback in rank order, the attempt cap, terminal
 kinds, the deadline stop, ``budget_exceeded`` never falling back), AC-15 (fallback and
 ``route_rank``), AC-16 (``run`` part: error code, fallback or not, attempt bound per kind), AC-18
-(``max_provider_attempts``), AC-19 (the deadline stop with ``FakeClock``) and D-32 (the final
-error, observed behavior: D-32 is unresolved, see T-004). Every attempt has its own reservation
+(content refusal is not retried), AC-19 (``max_provider_attempts``), the deadline stop of 10.3
+(no AC of its own; tested with ``FakeClock``) and D-32 (the final error, observed behavior: D-32
+is unresolved, see T-004). Every attempt has its own reservation
 and usage row (INV-7). Synthetic text only; the provider is the scripted fake.
 """
 
@@ -129,7 +130,6 @@ def _ctx(workspace_id: UUID) -> AiCallContext:
         (_fail(Kind.RATE_LIMITED), "provider_rate_limited"),
         (_fail(Kind.AUTH_FAILED), "provider_auth_failed"),
         (_ok(VALID_OUTPUT_JSON, finish_reason="length"), "output_truncated"),
-        (_ok(BAD_OUTPUT), "output_invalid"),
     ],
 )
 async def test_a_failed_attempt_falls_back_to_the_next_candidate_in_rank_order(
@@ -170,7 +170,7 @@ async def test_a_failed_attempt_falls_back_to_the_next_candidate_in_rank_order(
 async def test_bad_request_and_content_refusal_make_exactly_one_attempt(
     env: AiDbEnv, kind: Kind, code: str, error: type[Exception]
 ) -> None:
-    """Spec 10.3, AC-16: no fallback although more candidates exist."""
+    """Spec 10.3, AC-16, AC-18: no fallback although more candidates exist."""
     workspace_id = await env.new_workspace()
     orchestrator, provider = build_orchestrator(
         env, env.clock(), entries=ENTRIES, script=[_fail(kind), _ok()]
@@ -186,7 +186,7 @@ async def test_bad_request_and_content_refusal_make_exactly_one_attempt(
 
 
 async def test_attempts_stop_at_max_provider_attempts_with_distinct_models(env: AiDbEnv) -> None:
-    """Spec 10.3, AC-18: four candidates, every call fails, only three distinct models are tried
+    """Spec 10.3, AC-19: four candidates, every call fails, only three distinct models are tried
     and the request ends with the code of the last failure."""
     workspace_id = await env.new_workspace()
     orchestrator, provider = build_orchestrator(
@@ -205,28 +205,33 @@ async def test_attempts_stop_at_max_provider_attempts_with_distinct_models(env: 
 
 async def test_all_invalid_outputs_end_with_ai_output_invalid(env: AiDbEnv) -> None:
     """Spec 10.3 / D-32: every attempt invalid -> ``AiOutputInvalid``, code ``output_invalid``.
-    No repair call yet (step 6), so one call per model."""
+    Each of the three models gets its first call and one repair call (6 calls, INV-9)."""
     workspace_id = await env.new_workspace()
     orchestrator, provider = build_orchestrator(
-        env, env.clock(), entries=ENTRIES, script=[_ok(BAD_OUTPUT)] * 3
+        env, env.clock(), entries=ENTRIES, script=[_ok(BAD_OUTPUT)] * 6
     )
     with pytest.raises(AiOutputInvalid):
         await orchestrator.run(_ctx(workspace_id), _request())
-    assert len(provider.calls) == 3
+    assert len(provider.calls) == 6
     row = await _request_row(env, workspace_id)
     assert row.status == "failed" and row.error_code == "output_invalid"
     assert row.output_payload is None
 
 
 async def test_mixed_failures_end_with_the_class_and_code_of_final_error(env: AiDbEnv) -> None:
-    """Current behavior, D-32 unresolved (T-004): an invalid output followed by transport
+    """Current behavior, D-32 unresolved (T-004): an invalid first model followed by transport
     failures raises ``AiProviderUnavailable`` and persists the last failure's code."""
     workspace_id = await env.new_workspace()
     orchestrator, _ = build_orchestrator(
         env,
         env.clock(),
         entries=ENTRIES,
-        script=[_ok(BAD_OUTPUT), _fail(Kind.TIMEOUT), _fail(Kind.CONNECTION_ERROR)],
+        script=[
+            _ok(BAD_OUTPUT),
+            _ok(BAD_OUTPUT),
+            _fail(Kind.TIMEOUT),
+            _fail(Kind.CONNECTION_ERROR),
+        ],
     )
     with pytest.raises(AiProviderUnavailable):
         await orchestrator.run(_ctx(workspace_id), _request())
@@ -265,8 +270,8 @@ class _ClockMovingProvider(FakeAiProvider):
 async def test_the_deadline_stops_the_next_attempt_when_the_time_left_is_below_its_p50(
     env: AiDbEnv,
 ) -> None:
-    """Spec 10.3, AC-19: 19.9 s of the 20 s interactive deadline are gone, the next model needs
-    600 ms, so the request fails ``provider_timeout`` and no second call or usage row exists."""
+    """Spec 10.3 (deadline stop): 19.9 s of the 20 s interactive deadline are gone and the next
+    model needs 600 ms, so the request fails ``provider_timeout`` with no second call or row."""
     clock = env.clock()
     workspace_id = await env.new_workspace()
     provider = _ClockMovingProvider(clock, [19.9], [_fail(Kind.TIMEOUT), _ok()])
@@ -282,7 +287,7 @@ async def test_the_deadline_stops_the_next_attempt_when_the_time_left_is_below_i
 
 
 async def test_the_deadline_allows_the_next_attempt_when_enough_time_is_left(env: AiDbEnv) -> None:
-    """AC-19 counterpart: 19.0 s used leaves 1000 ms, above the next model's 600 ms p50, and the
+    """Deadline counterpart: 19.0 s used leaves 1000 ms, above the next model's 600 ms p50, and the
     second call gets exactly the time that is left as its timeout."""
     clock = env.clock()
     workspace_id = await env.new_workspace()

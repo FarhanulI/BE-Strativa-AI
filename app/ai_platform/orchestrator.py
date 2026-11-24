@@ -11,9 +11,17 @@ Step 4: fallback in rank order (spec 10.3). Every failed attempt is settled ``fa
 ``error_code`` and the next candidate is tried, up to ``max_provider_attempts`` distinct models.
 Bad request and content refusal end the request at once. When the candidates or the attempt cap
 are used up the error comes from ``final_error`` (D-32, observed behavior). When the time left
-is below the next candidate's median latency the request fails ``provider_timeout``. A strict
-validation failure falls back without a repair call until step 6; the circuit breaker is used
-from step 5.
+is below the next candidate's median latency the request fails ``provider_timeout``.
+Step 5: the billing mode is locked by the Router (INV-29), so every candidate of a request has one
+mode and a rate limit never crosses to the other mode; each attempt is recorded on the circuit
+breaker. A candidate the breaker denies at call time is skipped: no attempt, no reservation, no
+usage row (D-35). When every remaining candidate is skipped the request fails
+``provider_unavailable``.
+Step 6: a strict-validation failure gets up to ``max_repair_attempts`` repair calls to the same
+model (spec 11): a new reservation from the repair messages, skipped without a call when it
+exceeds the task's cost-class ceiling (D-34), no time is left or the breaker denies the model.
+A truncated output is never repaired. The attempt cap counts distinct models, so a request makes
+at most ``max_provider_attempts * (1 + max_repair_attempts)`` calls (INV-9).
 
 The orchestrator never names a provider or model, and never puts request content into an error.
 """
@@ -22,7 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import NoReturn
+from typing import Literal, NoReturn
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -36,7 +44,7 @@ from app.ai_platform.budget_coordinator import (
     SettlementOutcome,
 )
 from app.ai_platform.catalog import CatalogModel, ModelCatalog
-from app.ai_platform.circuit_breaker import CircuitBreakerRegistry
+from app.ai_platform.circuit_breaker import AttemptHandle, CircuitBreakerRegistry
 from app.ai_platform.config import AiPlatformConfig
 from app.ai_platform.context import AiCallContext
 from app.ai_platform.enums import AiModality, LatencyClass, TaskScope
@@ -55,8 +63,8 @@ from app.ai_platform.failure_policy import (
     next_attempt_allowed,
     terminal_error_class,
 )
-from app.ai_platform.messages import build_generation_messages
-from app.ai_platform.pricing import cost_micro_usd
+from app.ai_platform.messages import build_generation_messages, build_repair_messages
+from app.ai_platform.pricing import cost_micro_usd, estimate_generation_micro_usd
 from app.ai_platform.provider import (
     ChatMessage,
     ProviderCallError,
@@ -79,6 +87,7 @@ from app.ai_platform.schemas import OutputSchemaRegistry
 from app.ai_platform.tasks import AiTaskDefinition, AiTaskRegistry, resolve_max_output_units
 from app.ai_platform.usage_types import AiUsageSummary
 from app.ai_platform.validation import (
+    ValidationIssue,
     ValidationOutcome,
     response_mode_for,
     response_schema_for,
@@ -125,6 +134,10 @@ class AttemptResult:
     cost_micro_usd: int
     error_code: AiErrorCode | None
     kind: ProviderFailureKind | None
+    # Kept in memory only, for the repair message of a strict-validation failure. Never stored,
+    # logged or put into an error (spec 11: only counts and type names are recorded).
+    raw_text: str | None = None
+    issues: tuple[ValidationIssue, ...] = ()
 
 
 class AiOrchestrator:
@@ -185,7 +198,7 @@ class AiOrchestrator:
         request_id = await self._create_row(ctx, request, validated)
 
         parts_text = [part.text for part in request.parts if isinstance(part, TextPart)]
-        messages, _marker = build_generation_messages(
+        messages, marker = build_generation_messages(
             request.instructions, request.context, parts_text
         )
         input_units = self._estimator.estimate_messages(messages)
@@ -195,15 +208,18 @@ class AiOrchestrator:
 
         attempts: list[AttemptResult] = []
         failures: list[ProviderFailureKind] = []
+        tried = 0  # distinct models attempted; a repair call is not a new model
         cap = self._config.max_provider_attempts
         try:
-            for index, candidate in enumerate(routing.candidates[:cap]):
-                if index > 0 and not self._may_try_next(candidate, started_at, validated, index):
+            for candidate in routing.candidates:
+                if tried >= cap:
+                    break
+                if tried and not self._may_try_next(candidate, started_at, validated, tried):
                     await self._end_failed(
                         request_id, deadline_stop_error_code(), routing.routing_version
                     )
                     raise AiProviderUnavailable()
-                attempt = await self._attempt(
+                first = await self._guarded_attempt(
                     ctx,
                     request,
                     validated,
@@ -213,22 +229,53 @@ class AiOrchestrator:
                     messages,
                     started_at,
                     attempt_no=len(attempts) + 1,
+                    call_kind="generation",
+                    reserve_micro_usd=candidate.estimated_cost_micro_usd,  # D-24
                 )
-                attempts.append(attempt)
-                if attempt.kind is None:
-                    break
-                failures.append(attempt.kind)
-                if classify(attempt.kind).terminal_on_first_failure:
-                    await self._end_failed(
-                        request_id, classify(attempt.kind).error_code, routing.routing_version
+                if first is None:
+                    continue  # D-35: not an attempt, no reservation, no usage row
+                tried += 1
+                attempts.append(first)
+                final = first
+                for _ in range(self._config.max_repair_attempts):
+                    if final.kind is not ProviderFailureKind.INVALID_OUTPUT:
+                        break
+                    repair = await self._repair(
+                        ctx,
+                        request,
+                        validated,
+                        request_id,
+                        routing,
+                        candidate,
+                        messages,
+                        marker,
+                        final,
+                        started_at,
+                        attempt_no=len(attempts) + 1,
                     )
-                    raise terminal_error_class(attempt.kind)()
+                    if repair is None:
+                        break  # skipped: the candidate counts as failed (invalid output)
+                    attempts.append(repair)
+                    final = repair
+                if final.kind is None:
+                    break
+                failures.append(final.kind)
+                if classify(final.kind).terminal_on_first_failure:
+                    await self._end_failed(
+                        request_id, classify(final.kind).error_code, routing.routing_version
+                    )
+                    raise terminal_error_class(final.kind)()
         except AiBudgetExceeded:
             # The atomic reservation refused the call; its refusal was already recorded (D-33).
             # Budget exhaustion never falls back (spec 10.3).
             await self._end_failed(request_id, AiErrorCode.BUDGET_EXCEEDED, routing.routing_version)
             raise
 
+        if not attempts:  # every candidate was denied by the breaker (D-35)
+            await self._end_failed(
+                request_id, AiErrorCode.PROVIDER_UNAVAILABLE, routing.routing_version
+            )
+            raise AiProviderUnavailable()
         last = attempts[-1]
         if last.output is None:
             ended = final_error(failures)
@@ -252,19 +299,116 @@ class AiOrchestrator:
             routing_id=last.usage_record_id,
         )
 
-    def _may_try_next(
-        self, candidate: RoutedModel, started_at: datetime, validated: ValidatedRun, tried: int
-    ) -> bool:
-        """The deadline rule of spec 10.3: the time left must cover the next model's p50."""
+    def _remaining_ms(self, validated: ValidatedRun, started_at: datetime) -> int:
         remaining = (
             self._config.deadline_seconds(validated.task.latency)
             - (self._clock.now() - started_at).total_seconds()
         )
+        return max(0, int(remaining * 1000))
+
+    def _may_try_next(
+        self, candidate: RoutedModel, started_at: datetime, validated: ValidatedRun, tried: int
+    ) -> bool:
+        """The deadline rule of spec 10.3: the time left must cover the next model's p50."""
         return next_attempt_allowed(
             tried,
             self._config.max_provider_attempts,
-            max(0, int(remaining * 1000)),
+            self._remaining_ms(validated, started_at),
             self._entry(candidate).latency_p50_ms,
+        )
+
+    def _padded_input(self, units: int) -> int:
+        """``ceil(units * (100 + margin) / 100)``, the same margin as the Router (spec 10.2.3)."""
+        margin = self._config.context_safety_margin_percent
+        return -(-(units * (100 + margin)) // 100)
+
+    async def _guarded_attempt(
+        self,
+        ctx: AiCallContext,
+        request: AiTaskRequest,
+        validated: ValidatedRun,
+        request_id: UUID,
+        routing: RoutingResult,
+        candidate: RoutedModel,
+        messages: tuple[ChatMessage, ...],
+        started_at: datetime,
+        *,
+        attempt_no: int,
+        call_kind: Literal["generation", "repair"],
+        reserve_micro_usd: int,
+    ) -> AttemptResult | None:
+        """One attempt behind the breaker. ``None`` when the breaker denies the model (D-35)."""
+        handle = self._breaker.begin_attempt((candidate.provider, candidate.model))
+        if handle is None:
+            return None
+        try:
+            return await self._attempt(
+                ctx,
+                request,
+                validated,
+                request_id,
+                routing,
+                candidate,
+                messages,
+                started_at,
+                handle,
+                attempt_no=attempt_no,
+                call_kind=call_kind,
+                reserve_micro_usd=reserve_micro_usd,
+            )
+        except BaseException:
+            self._breaker.abandon_attempt(handle)  # releases the probe this handle owns (D-37)
+            raise
+
+    async def _repair(
+        self,
+        ctx: AiCallContext,
+        request: AiTaskRequest,
+        validated: ValidatedRun,
+        request_id: UUID,
+        routing: RoutingResult,
+        candidate: RoutedModel,
+        messages: tuple[ChatMessage, ...],
+        marker: str,
+        failed: AttemptResult,
+        started_at: datetime,
+        *,
+        attempt_no: int,
+    ) -> AttemptResult | None:
+        """One repair call to the same model (spec 11, D-34); ``None`` when it is skipped.
+
+        The reservation is a new one from the margin-padded repair messages and the same effective
+        output cap. It is skipped, without a provider call, when it exceeds the task's cost-class
+        ceiling, when the time left is below the model's median latency, or when the breaker
+        denies the model.
+        """
+        entry = self._entry(candidate)
+        if candidate.effective_max_output_units is None:
+            raise ValueError("a generation candidate needs an effective output cap")
+        repair_messages = build_repair_messages(
+            messages, failed.raw_text or "", failed.issues, marker
+        )
+        estimate = estimate_generation_micro_usd(
+            self._padded_input(self._estimator.estimate_messages(repair_messages)),
+            candidate.effective_max_output_units,
+            entry,
+        )
+        if estimate > self._config.cost_ceiling_micro_usd(validated.task.cost):
+            return None
+        if self._remaining_ms(validated, started_at) < entry.latency_p50_ms:
+            return None
+        return await self._guarded_attempt(
+            ctx,
+            request,
+            validated,
+            request_id,
+            routing,
+            candidate,
+            repair_messages,
+            started_at,
+            attempt_no=attempt_no,
+            call_kind="repair",
+            reserve_micro_usd=estimate,
         )
 
     async def _attempt(
@@ -277,8 +421,11 @@ class AiOrchestrator:
         candidate: RoutedModel,
         messages: tuple[ChatMessage, ...],
         started_at: datetime,
+        handle: AttemptHandle,
         *,
         attempt_no: int,
+        call_kind: Literal["generation", "repair"],
+        reserve_micro_usd: int,
     ) -> AttemptResult:
         """Reserve, call and settle once: three separate steps, no transaction open in the call."""
         task = validated.task
@@ -292,16 +439,17 @@ class AiOrchestrator:
         if candidate.effective_max_output_units is None:
             raise ValueError("a generation candidate needs an effective output cap")
 
-        # Reserve the Router's estimate, unchanged (D-24). Own transaction, committed on return.
+        # Reserve the given estimate: the Router's, unchanged, for a first call (D-24), or the
+        # repair estimate (D-34). Own transaction, committed on return.
         reservation = await self._budgets.reserve_for_call(
             scope,
             ctx.workspace_id,
-            candidate.estimated_cost_micro_usd,
+            reserve_micro_usd,
             ReservationParams(
                 request_id=request_id,
                 attempt_no=attempt_no,
                 task=task.name.value,
-                call_kind="generation",
+                call_kind=call_kind,
                 provider=candidate.provider,
                 model=candidate.model,
                 catalog_version=self._catalog.catalog_version,
@@ -363,12 +511,16 @@ class AiOrchestrator:
             input_units, entry.input_micro_usd_per_million_units
         ) + cost_micro_usd(output_units, entry.output_micro_usd_per_million_units)
         error_code = None if kind is None else classify(kind).error_code
+        if kind is None:
+            self._breaker.record_success(handle)
+        else:
+            self._breaker.record_failure(handle, kind)
         finish = None if response is None else response.finish_reason
 
         await self._budgets.settle_call(
             reservation.usage_record_id,
             reservation.budget_row_id,
-            candidate.estimated_cost_micro_usd,
+            reserve_micro_usd,
             SettlementOutcome(
                 outcome="succeeded" if kind is None else "failed",
                 input_units=input_units,
@@ -395,6 +547,12 @@ class AiOrchestrator:
             cost_micro_usd=cost,
             error_code=error_code,
             kind=kind,
+            raw_text=(
+                response.raw_text
+                if response is not None and outcome is not None and not outcome.ok
+                else None
+            ),
+            issues=outcome.issues if outcome is not None and not outcome.ok else (),
         )
 
     def _entry(self, candidate: RoutedModel) -> CatalogModel:

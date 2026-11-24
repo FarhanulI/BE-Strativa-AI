@@ -30,6 +30,9 @@ from app.core import ConfigurationError, Settings, select_env_files
 MICRO_USD_PER_USD = Decimal(1_000_000)
 _MAX_MICRO_USD = 2**63 - 1  # the budget columns are bigint
 _BUDGET_DECIMAL_PLACES = Decimal("0.000001")
+# Safety margin of the circuit breaker probe lease (spec 10.4, D-37). An internal constant, not
+# a setting, and independent of ``breaker_open_seconds``.
+PROBE_LEASE_MARGIN_SECONDS = 30
 
 GeminiBillingMode = Literal["free_tier", "paid"]
 BillingModeName = Literal["free_tier", "paid"]
@@ -231,6 +234,12 @@ class AiPlatformConfig(BaseSettings):
             self.standard_deadline_seconds,
             self.batch_deadline_seconds,
         )
+
+    @property
+    def probe_lease_seconds(self) -> int:
+        """After this long without an outcome another attempt may claim a new breaker probe
+        (spec 10.4, D-37). The longest request deadline plus a fixed margin."""
+        return self.longest_deadline_seconds + PROBE_LEASE_MARGIN_SECONDS
 
     def cost_ceiling_micro_usd(self, cost: CostClass) -> int:
         """The worst-case cost ceiling of a single provider call for a cost class."""

@@ -262,28 +262,33 @@ async def test_invalid_output_is_never_returned_or_stored_and_the_attempt_is_set
 ) -> None:
     """INV-8, AC-22: strict validation fails -> no result, no payload; the usage row is settled
     ``failed`` with counts and type names only, and the reservation is released (INV-7).
-    One candidate and no repair yet (step 6), so the request ends ``AiOutputInvalid``."""
+    One candidate: the first call and its one repair call both fail validation, so the request
+    ends ``AiOutputInvalid`` (the repair paths are in test_orchestrator_run_repair.py)."""
     workspace_id = await env.new_workspace()
     bad = json.dumps({"value": 5, "extra": "zz-sentinel-output-3391"})
-    orchestrator, _ = build_orchestrator(env, env.clock(), script=[_ok(bad)])
+    orchestrator, _ = build_orchestrator(env, env.clock(), script=[_ok(bad), _ok(bad)])
     ctx = AiCallContext.for_worker(workspace_id=workspace_id, request_id="r")
     with pytest.raises(AiOutputInvalid):
         await orchestrator.run(ctx, _request(persist_result=True))
-    (usage,) = await _usage_rows(env, workspace_id)
-    assert usage.status == "failed" and usage.error_code == "output_invalid"
-    assert usage.schema_valid is False and usage.validation_error_count == 2
-    assert sorted(usage.validation_error_types) == ["extra_forbidden", "string_type"]
-    assert (usage.input_units, usage.output_units, usage.cost_micro_usd) == (
-        IN_UNITS,
-        OUT_UNITS,
-        EXPECTED_COST,
+    usage_rows = await _usage_rows(env, workspace_id)
+    assert [u.call_kind for u in usage_rows] == ["generation", "repair"]
+    for usage in usage_rows:
+        assert usage.status == "failed" and usage.error_code == "output_invalid"
+        assert usage.schema_valid is False and usage.validation_error_count == 2
+        assert sorted(usage.validation_error_types) == ["extra_forbidden", "string_type"]
+        assert (usage.input_units, usage.output_units, usage.cost_micro_usd) == (
+            IN_UNITS,
+            OUT_UNITS,
+            EXPECTED_COST,
+        )
+    assert "zz-sentinel-output-3391" not in json.dumps(
+        [[str(v) for v in usage] for usage in usage_rows], default=str
     )
-    assert "zz-sentinel-output-3391" not in json.dumps([str(v) for v in usage], default=str)
     row = await _request_row(env, workspace_id)
     assert row.output_payload is None and row.status == "failed"
     assert row.error_code == "output_invalid"
     budget = await _budget(env, workspace_id)
-    assert (budget.reserved_micro_usd, budget.spent_micro_usd) == (0, EXPECTED_COST)
+    assert (budget.reserved_micro_usd, budget.spent_micro_usd) == (0, 2 * EXPECTED_COST)
 
 
 @pytest.mark.parametrize(

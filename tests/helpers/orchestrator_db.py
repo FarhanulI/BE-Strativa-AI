@@ -50,8 +50,10 @@ def build_orchestrator(
     script: Iterable[ScriptedResponse] = (),
     coordinator_factory: Callable[..., BudgetCoordinator] = BudgetCoordinator,
     provider: FakeAiProvider | None = None,
+    breaker_factory: Callable[..., CircuitBreakerRegistry] = CircuitBreakerRegistry,
+    config_values: dict[str, Any] | None = None,
 ) -> tuple[AiOrchestrator, FakeAiProvider]:
-    values: dict[str, Any] = {"workspace_monthly_budget_usd": budget_usd}
+    values: dict[str, Any] = {"workspace_monthly_budget_usd": budget_usd, **(config_values or {})}
     if key is not None:
         values["gemini_api_key"] = key
     config = AiPlatformConfig(_env_file=None, **values)
@@ -68,7 +70,7 @@ def build_orchestrator(
         config,
         catalog,
         clock,
-        CircuitBreakerRegistry(clock, config),
+        breaker_factory(clock, config),
         coordinator_factory(env.sessions, clock, config),
         provider,
         CharCountEstimator(),
