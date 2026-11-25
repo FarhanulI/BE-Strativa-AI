@@ -1,7 +1,7 @@
 # T-014: Traceability evidence format
 
 - **Module and phase:** None (SDD process support); serves T-002 and T-003
-- **State:** Implemented (owner started 2026-11-20; awaiting owner acceptance)
+- **State:** Accepted by the owner 2026-11-25 ("accept T-014, T-015 and T-016"); owner started 2026-11-20
 - **Requirement IDs:** None: process support. It changes no requirement and no status.
 - **Specification references:** [traceability.md](../traceability.md) rules 1 to 11; [sdd.md](../sdd.md) sections 4 and 6; T-012 proposals P-2 and P-3
 - **Dependencies:** T-012 approved (it defines the evidence rule this task puts into a template). Must exist before T-002 records its first result.
@@ -39,4 +39,4 @@ The template exists, contains every P-2 field, and a trial record built from it 
 - `sdd-close-milestone`: NOT RUN. Independent audit: NOT RUN.
 
 ## Review and approval
-Plan approved by the owner on 2026-11-20 ("start T-014"). **Gate: milestone end** (documentation only; no migration, contract, security, dependency, ADR or AI-target change).
+Plan approved by the owner on 2026-11-20 ("start T-014"). Accepted by the owner 2026-11-25 ("accept T-014, T-015 and T-016"). **Gate: milestone end** (documentation only; no migration, contract, security, dependency, ADR or AI-target change).

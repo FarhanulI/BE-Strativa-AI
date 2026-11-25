@@ -333,7 +333,8 @@ def test_transitions_are_logged_with_ids_and_counts_only() -> None:
 
 def test_a_released_attempt_cannot_clear_a_newer_probe_claim() -> None:
     """AC-64 (a), (e). A releases its probe by a neutral outcome, E claims a new probe, then A's
-    cleanup runs (for example after a failed settlement). E must still own the probe."""
+    cleanup and late outcomes run (for example after a failed settlement). E must still own the
+    probe, and A can neither close nor re-open the breaker."""
     registry, clock = make()
     a = claim_probe(registry, clock)
     registry.record_failure(a, K.INVALID_OUTPUT)  # neutral: A releases the probe
@@ -341,6 +342,10 @@ def test_a_released_attempt_cannot_clear_a_newer_probe_claim() -> None:
     assert e.probe
     registry.abandon_attempt(a)  # A's cleanup runs late
     assert registry.begin_attempt(KEY) is None  # F is denied: E still owns the probe
+    registry.record_failure(a, K.TIMEOUT)  # A's late outcomes must not re-open or close it
+    registry.record_success(a)
+    assert registry.state(KEY) == "half_open"
+    assert registry.begin_attempt(KEY) is None  # E still owns the probe
     registry.record_success(e)  # and E can still close the breaker
     assert registry.state(KEY) == "closed"
 

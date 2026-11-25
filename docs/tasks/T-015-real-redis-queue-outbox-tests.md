@@ -1,7 +1,7 @@
 # T-015: Real-Redis queue, outbox and lease tests
 
 - **Module and phase:** jobs_workers, events_outbox, observability_audit; Phase 0
-- **State:** Implemented (owner started 2026-11-20; runs recorded 2026-11-20; 3 of 4 requirements `Verified`, OBS-AC-3 stays `Gap`; awaiting owner review)
+- **State:** Accepted (owner started 2026-11-20; runs recorded 2026-11-20; 3 of 4 requirements `Verified`, OBS-AC-3 stays `Gap`; accepted by the owner 2026-11-25, "accept T-014, T-015 and T-016")
 - **Requirement IDs:** JOB-AC-2 (currently `Gap`), OUT-AC-3 (`Gap`), OBS-AC-3 (`Gap`), and the lease-reclaim clause of OUT-AC-2 (`Implemented`, partial). JOB-AC-1 and JOB-AC-3 are not changed.
 - **Specification references:** [jobs-workers](../specs/jobs-workers/spec.md), [events-outbox](../specs/events-outbox/spec.md), [observability-audit](../specs/observability-audit/spec.md) acceptance criteria; [conformance report](../architecture/conformance-report.md) E-2, E-4
 - **Dependencies:** T-013 for the CI Redis service (the tests can be developed locally first). T-014 for recording. A real Redis instance. T-002 depends on this task for its JOB rows, which stay `Gap` until it is done.
@@ -65,4 +65,4 @@ API route handlers that publish events do not put a request ID into the outbox m
 **Still NOT RUN:** the CI run (T-013 deferred); the independent audit; any Neon run. Redis was not run with `REQUIRE_REDIS_TESTS=1`.
 
 ## Review and approval
-Plan started by the owner on 2026-11-20. **Gate: milestone end.** The `pyproject.toml` change is a single added marker, so the gate is not raised; the owner may raise it. Independent audit (sdd.md section 11): NOT RUN. The task is not `Verified` because OBS-AC-3 is not met (API hop, a decision for the owner).
+Plan started by the owner on 2026-11-20. **Gate: milestone end.** The `pyproject.toml` change is a single added marker, so the gate is not raised; the owner may raise it. Independent audit (sdd.md section 11): NOT RUN. The task is not `Verified` because OBS-AC-3 is not met (API hop, a decision for the owner). Accepted by the owner 2026-11-25 ("accept T-014, T-015 and T-016"); OBS-AC-3 stays `Gap` and the independent audit stays NOT RUN.

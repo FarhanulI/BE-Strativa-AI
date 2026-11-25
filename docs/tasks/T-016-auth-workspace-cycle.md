@@ -1,7 +1,7 @@
 # T-016: auth and workspace dependency cycle (check, then fix)
 
 - **Module and phase:** auth, workspace, api_contract (composition root); Phase 1 and Phase 0
-- **State:** Implemented (steps 0 to 2 done 2026-11-20; step 1 exemption approved by the owner; step 2 awaiting the owner's result review)
+- **State:** Accepted by the owner 2026-11-25 ("accept T-014, T-015 and T-016"); steps 0 to 2 done 2026-11-20; step 1 exemption approved by the owner; step 2 result reviewed and accepted
 - **Requirement IDs:** CORE-INV-11, WS-AC-7 (the boundary rules the check strengthens); AUTH-AC-2 and AUTH-AC-7 (must stay satisfied by the fix)
 - **Specification references:** [auth-onboarding](../specs/auth-onboarding/spec.md) (registration calls `WorkspaceService.create_workspace_for_owner(session, user_id, name)` in the caller-owned transaction; `/me` reads roles through the workspace public interface); [workspace](../specs/workspace/spec.md); [conformance report](../architecture/conformance-report.md) B-1 (corrected 2026-11-20); ADR-0003 (proposed)
 - **Dependencies:** A recorded baseline run of the auth and workspace DB tests before any change (step 0), from T-003 or from this task. T-013 preferred. Owner decisions of 2026-11-20: dependency inversion at the composition root; the protocol takes the caller's session or unit of work; the cycle check includes function-level imports; owner review between step 1 and step 2.
@@ -82,4 +82,4 @@ Excluding that single file leaves exactly one cycle, auth and workspace, matchin
 **NOT RUN:** the independent audit; CI (T-013 deferred); Neon.
 
 ## Review and approval
-Plan started by the owner on 2026-11-20. **Gate: always** (auth behavior; contracts). Owner review after step 1: done, exemption approved 2026-11-20. Owner review after step 2: **requested now** (gate always; ADR-0003 status changed to Accepted as implemented, pending your confirmation).
+Plan started by the owner on 2026-11-20. **Gate: always** (auth behavior; contracts). Owner review after step 1: done, exemption approved 2026-11-20. Owner review after step 2: **done, accepted 2026-11-25** (gate always; the acceptance confirms ADR-0003 as Accepted as implemented).
