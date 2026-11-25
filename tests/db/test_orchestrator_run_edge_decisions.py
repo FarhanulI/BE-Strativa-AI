@@ -190,8 +190,9 @@ async def test_a_dropped_cleanup_error_writes_no_log_record(
     env: AiDbEnv, caplog: pytest.LogCaptureFixture
 ) -> None:
     """D-D (a), INV-18: the cleanup error is dropped without a log record in structlog or the
-    standard log, so neither its message nor its class name appears. Pins today's behavior; D-D (b)
-    would write one fixed-message record with the exception class name only."""
+    standard log: its message appears nowhere, and no error, warning or critical structlog record
+    is written. Pins today's behavior; D-D (b) would write one fixed-message record with the
+    exception class name only."""
     workspace_id = await env.new_workspace()
     orchestrator, _ = build_orchestrator(
         env,
