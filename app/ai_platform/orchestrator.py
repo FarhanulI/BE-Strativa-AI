@@ -204,13 +204,15 @@ class AiOrchestrator:
         validated = self.validate_run(ctx, request)
         started_at = self._clock.now()
         request_id = await self._create_row(ctx, request, validated)
+        decided = _RoutingDecided()
 
         try:
-            return await self._run_routed(ctx, request, validated, request_id, started_at)
+            return await self._run_routed(ctx, request, validated, request_id, started_at, decided)
         except BaseException:
             # T-023 (D-A, D-C, D-D): end a row that is still running, then re-raise unchanged.
             # A deliberate ending already completed the row, so this is then a no-op.
-            await self._fail_open_request(request_id)
+            # T-024 D-C (b): the routing version is recorded only if routing made a decision.
+            await self._fail_open_request(request_id, decided.routing_version)
             raise
 
     async def _run_routed(
@@ -220,6 +222,7 @@ class AiOrchestrator:
         validated: ValidatedRun,
         request_id: UUID,
         started_at: datetime,
+        decided: _RoutingDecided,
     ) -> AiTaskResult:
         """Route, attempt, validate and finish a request whose row already exists."""
         parts_text = [part.text for part in request.parts if isinstance(part, TextPart)]
@@ -228,6 +231,7 @@ class AiOrchestrator:
         )
         input_units = self._estimator.estimate_messages(messages)
         routing = route(await self._routing_input(ctx, request, validated, input_units))
+        decided.routing_version = routing.routing_version
         if routing.failure is not None:
             await self._refuse(ctx, validated, request_id, routing, routing.failure)
 
@@ -613,14 +617,16 @@ class AiOrchestrator:
             issues=outcome.issues if outcome is not None and not outcome.ok else (),
         )
 
-    async def _fail_open_request(self, request_id: UUID) -> None:
+    async def _fail_open_request(self, request_id: UUID, routing_version: str | None) -> None:
         """End the row ``failed`` with ``execution_abandoned`` if it is still ``running``.
 
         The completion is one conditional UPDATE, so a row that was already ended (a deliberate
         refusal or failure) is left as it is. Shielded from cancellation (T-023 D-D).
+        ``routing_version`` is ``None`` when the fault came before routing decided (T-024 D-C):
+        the column then stays NULL.
         """
         await self._finish_shielded(
-            self._end_failed(request_id, AiErrorCode.EXECUTION_ABANDONED, ROUTING_VERSION)
+            self._end_failed(request_id, AiErrorCode.EXECUTION_ABANDONED, routing_version)
         )
 
     @staticmethod
@@ -728,7 +734,7 @@ class AiOrchestrator:
         raise routing_error_class(failure)()
 
     async def _end_failed(
-        self, request_id: UUID, error_code: AiErrorCode, routing_version: str
+        self, request_id: UUID, error_code: AiErrorCode, routing_version: str | None
     ) -> None:
         async with self._sessions() as session, session.begin():
             await request_repo.complete_request(
@@ -758,6 +764,19 @@ class AiOrchestrator:
                 routing_version=routing_version,
                 now=self._clock.now(),
             )
+
+
+class _RoutingDecided:
+    """Whether routing has made a decision for one ``run`` call, and under which rules version.
+
+    Set once routing returns; ``None`` before that, so a fault ahead of routing leaves
+    ``ai_requests.routing_version`` NULL (T-024 D-C).
+    """
+
+    __slots__ = ("routing_version",)
+
+    def __init__(self) -> None:
+        self.routing_version: str | None = None
 
 
 def _required(value: str | None) -> str:

@@ -1,7 +1,7 @@
 # T-011: AI Platform synchronous `run` path (fake provider)
 
 - **Module and phase:** ai_platform, Phase 2 (sub-task of T-008, part (b))
-- **State:** Implemented (2026-11-24: steps 1 to 10 done and committed, `spec-auditor` run, open items moved to [T-023](T-023-ai-platform-run-followups.md); awaiting owner result review and acceptance). Plan was approved by the owner with "start step 1", 2026-11-21.
+- **State:** Accepted by the owner 2026-11-25 ("accept T-011 too"). Was Implemented (2026-11-24: steps 1 to 10 done and committed, `spec-auditor` run, open items moved to [T-023](T-023-ai-platform-run-followups.md), which is also Accepted). Plan was approved by the owner with "start step 1", 2026-11-21.
 - **Requirement IDs:** (all exist in the spec and the traceability matrix; coverage is limited to the `run` path unless stated. Completing the `run` clause of a criterion does not make the whole criterion verified.)
   - Invariants: INV-4 (`run` path only; the `execute_request` and `embed_texts` paths stay open), INV-6, INV-7, INV-8, INV-9, INV-23, INV-24, INV-26, INV-29 (`run` path only).
   - Acceptance criteria:
@@ -134,7 +134,7 @@ Boundaries: product code only under `app/ai_platform/`. Persistence stays inside
 - **Not done (needs the owner):** the task state change from In Progress, and the commits.
 
 ## Review and approval
-Not requested. Owner approval is recorded elsewhere only for the spec revisions (T-006, 2026-11-19), not for this task.
+Result review and acceptance: approved by the owner 2026-11-25 ("accept T-011 too"). Owner approval is recorded elsewhere only for the spec revisions (T-006, 2026-11-19), not for this task.
 
 ## Risks and architectural considerations
 - **Spec approval basis.** The revision 5 to 7 approval is a conversation-recorded owner decision (T-006), with no earlier evidence. If the owner later amends those revisions, steps 3, 5 and 6 are the affected ones.
