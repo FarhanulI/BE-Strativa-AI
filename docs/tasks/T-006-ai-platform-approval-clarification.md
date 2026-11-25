@@ -1,7 +1,7 @@
 # T-006: AI Platform revision 5 to 7 approval clarification
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** Implemented (owner decision recorded 2026-11-19; awaiting owner acceptance review)
+- **State:** Accepted by the owner 2026-11-25 ("accept T-006"); owner decision recorded 2026-11-19
 - **Requirement IDs:** None. Dependency: approval status of AI Platform spec revisions 5 to 7, which introduced AC-59, AC-60, AC-61 and D-24 to D-35.
 - **Specification references:** [AI Platform spec header](../specs/ai-platform/spec.md)
 - **Dependencies:** Owner confirmation (received, see Evidence).
@@ -34,4 +34,4 @@ The spec header states the confirmed approval state per revision.
 - Revision 4 approval remains as before: recorded in the Status paragraph, date not stated.
 
 ## Review and approval
-Owner decision recorded 2026-11-19. Acceptance review: not requested.
+Owner decision recorded 2026-11-19. Acceptance: approved by the owner 2026-11-25 ("accept T-006"). The stale "AI Platform approval history" row in decisions.md section 6 (see Evidence) was not changed by this acceptance.

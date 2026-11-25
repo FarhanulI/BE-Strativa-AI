@@ -11,7 +11,7 @@ A task is a bounded, owner-approved unit of work. The process, lifecycle and rul
 | [T-003](T-003-phase1-retrospective-verification.md) | Phase 1 retrospective verification gaps | auth, workspace, profile / 1 | Proposed | T-001 for WS-AC-3; owner approval |
 | [T-004](T-004-d32-owner-resolution.md) | D-32 owner resolution | ai_platform / 2 | Blocked | Owner decision |
 | [T-005](T-005-d20-revision-metadata.md) | D-20 revision metadata investigation | ai_platform / 2 | Blocked | New evidence (history) not available |
-| [T-006](T-006-ai-platform-approval-clarification.md) | AI Platform revision 5 to 7 approval clarification | ai_platform / 2 | Implemented | Owner decision recorded 2026-11-19; awaiting acceptance |
+| [T-006](T-006-ai-platform-approval-clarification.md) | AI Platform revision 5 to 7 approval clarification | ai_platform / 2 | Accepted | Owner decision recorded 2026-11-19; accepted by the owner 2026-11-25. The `decisions.md` section 6 row on revisions 5 to 7 is still stale and needs an owner-approved docs update |
 | [T-007](T-007-web-foundation-spec-dependency.md) | web_foundation specification dependency | web_foundation / 0 | Blocked | Frontend task must provide the spec |
 | [T-008](T-008-ai-platform-remaining-verification.md) | Remaining AI Platform implementation and verification gaps | ai_platform / 2 | Proposed | T-004 and T-006 for governance; feature work waits for owner approval to resume (SDD-D-3) |
 | [T-009](T-009-nine-spec-approval-metadata.md) | Approval metadata for the nine non-AI-Platform specs | Phase 0 and 1 modules | Blocked | Owner confirmation |
