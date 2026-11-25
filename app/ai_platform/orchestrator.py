@@ -34,6 +34,7 @@ The orchestrator never names a provider or model, and never puts request content
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import datetime
@@ -386,7 +387,10 @@ class AiOrchestrator:
                 reserve_micro_usd=reserve_micro_usd,
             )
         except BaseException:
-            self._breaker.abandon_attempt(handle)  # releases the probe this handle owns (D-37)
+            # T-022 (D-37): release the probe this handle owns. A failing release must not replace
+            # the original exception; the probe lease expiry is the backstop for a lost release.
+            with contextlib.suppress(Exception):
+                self._breaker.abandon_attempt(handle)
             raise
 
     async def _repair(

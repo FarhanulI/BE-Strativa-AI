@@ -1,7 +1,7 @@
 # T-022: Circuit breaker probe ownership and lease (D-37)
 
 - **Module and phase:** ai_platform, Phase 2
-- **State:** Ready (owner readiness decision 2026-11-24: "T-022 is Ready, start checkpoint 2"). Checkpoint 2 approved 2026-11-24. Checkpoint 3 done, awaiting owner review.
+- **State:** Ready (owner readiness decision 2026-11-24: "T-022 is Ready, start checkpoint 2"). Checkpoint 2 approved 2026-11-24. Checkpoint 3 approved 2026-11-25. Checkpoint 4 approved 2026-11-25; DB suite 305 passed.
 - **Requirement IDs:**
   - New: AC-64 and AC-65 (spec 17.2, revision 11). Decision D-37 (spec 20.1, revision 11).
   - Preserved without change: AC-20 and D-35. This task does not change their requirements or status.
@@ -105,6 +105,13 @@ AC-64 and AC-65 pass with recorded evidence; AC-20 and D-35 tests still pass wit
   - `python -m pytest tests/unit/ai_platform/test_circuit_breaker.py -p no:cacheprovider -q`: exit 0, **50 passed**.
   - `python scripts/check.py` (ruff, mypy, `pytest -m "not db"`): exit 0, **1798 passed, 4 skipped, 264 deselected**.
   - **NOT RUN:** `/run-db-suite` (owner-run; the DB tests that use the changed API, `test_orchestrator_run_billing_breaker.py`, have therefore not run against the new registry), any Neon run, any real provider.
+- **2026-11-25, checkpoint 4: orchestrator release guarded, AC-65 DB tests written.** Environment: local Windows, DB-free for the gate; `TEST_REDIS_URL` unset.
+  - `app/ai_platform/orchestrator.py` (only product file changed): in `_guarded_attempt` the `BaseException` handler now calls `abandon_attempt(handle)` inside `contextlib.suppress(Exception)`, then re-raises the original exception, so a failing release cannot replace it. Handle passing and the recording of the provider outcome before `settle_call` were done in checkpoint 3 and are unchanged.
+  - New `tests/db/test_orchestrator_run_probe_release.py` (4 test functions, 5 cases; AC-65, D-37). Setup: the real registry for the only model is opened with counted failures, then the fake clock moves past the open period, so the next attempt claims the half-open probe. Test 10: a budget refusal at reservation releases the probe, the breaker stays `half_open`, no provider call. Test 11: an unexpected provider exception releases the probe, the breaker stays `half_open` (not a provider failure), the original exception propagates with no `__cause__`. Test 12 (two cases): a settlement failure after a recorded success leaves the breaker `closed`, after a counted failure `open`. Test 13: `abandon_attempt` raising does not replace the original exception, the request row ends `failed`/`execution_abandoned`, and the lost release holds the probe until its lease (no second probe is admitted).
+  - `env -u TEST_REDIS_URL uv run python scripts/check.py` (ruff, mypy, pytest): exit 0, **1798 passed, 4 skipped, 305 deselected** (db: 300 plus 5 new), 11.96s.
+  - **NOT RUN:** a recorded red run of test 13 against the unguarded release (the test and the fix were written together); Neon; any real provider.
+  - Judgment calls (owner to confirm): the lost-release case in test 13 pins today's backstop (the claim stays until the lease expires), which a later change must alter on purpose; the fault in tests 10 to 13 is injected through a `CircuitBreakerRegistry` subclass and `BudgetCoordinator` subclasses, and the half-open state is built with the real registry and `FakeClock`, not a stub.
+- **2026-11-25, checkpoints 3 and 4: DB run.** `/run-db-suite all` (`bash scripts/run_db_suite.sh all`), local Postgres container, Redis up, exit 0: **305 passed, 0 failed, 0 skipped**, 1802 deselected, 97.91s; cleanup done. The 5 new tests in `test_orchestrator_run_probe_release.py` and the 9 tests in `test_orchestrator_run_billing_breaker.py` (the DB users of the changed handle API) all passed, on the tree with checkpoints 3 and 4 together. This also closes the checkpoint 3 "DB run NOT RUN" item. Checkpoint 4 approved by the owner 2026-11-25.
 
 ## Review and approval
 
@@ -117,4 +124,5 @@ AC-64 and AC-65 pass with recorded evidence; AC-20 and D-35 tests still pass wit
   5. Final verification and the fresh-context spec-auditor audit.
 - Readiness (`Proposed` to `Ready`): **approved 2026-11-24** ("T-022 is Ready, start checkpoint 2").
 - Checkpoint 2 (failing H1 test against the old implementation): **approved 2026-11-24.**
-- Checkpoint 3 (registry ownership and lease): **done, awaiting owner review.** The DB run for it is NOT RUN. Checkpoints 4 and 5 not started.
+- Checkpoint 3 (registry ownership and lease): **approved 2026-11-25** ("approved checkpoint 3, start checkpoint 4"). Its own DB run was NOT RUN; the DB test of the changed API runs with checkpoint 4.
+- Checkpoint 4 (orchestrator integration and DB tests): **approved 2026-11-25** ("approved checkpoint 4, record the DB run"). Checkpoint 5 not started.
