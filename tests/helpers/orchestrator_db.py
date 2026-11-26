@@ -54,6 +54,7 @@ def build_orchestrator(
     breaker_factory: Callable[..., CircuitBreakerRegistry] = CircuitBreakerRegistry,
     config_values: dict[str, Any] | None = None,
     sessions: async_sessionmaker[AsyncSession] | None = None,
+    tasks: AiTaskRegistry | None = None,
 ) -> tuple[AiOrchestrator, FakeAiProvider]:
     """``sessions`` replaces the environment's session factory for the orchestrator and its budget
     coordinator (step 8 gives them their own engine with a recognizable ``application_name``)."""
@@ -79,6 +80,7 @@ def build_orchestrator(
         coordinator_factory(own_sessions, clock, config),
         provider,
         CharCountEstimator(),
+        tasks=tasks,
         schemas=schemas,
     )
     return orchestrator, provider
