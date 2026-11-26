@@ -1,6 +1,13 @@
 | `PATCH /me` | Update the authenticated user's display name; return user and workspaces with roles. |
 # Auth and Onboarding Feature Specification
 
+- **Module:** auth
+- **Phase:** 1 — Core & Tenancy
+- **Specification status:** Not stated (pending owner confirmation)
+- **Revision:** Not stated
+- **Approval status:** Not recorded (pending owner confirmation)
+- **Requirement ID prefix:** `AUTH` (`AUTH-INV-n`, `AUTH-AC-n`). Assigned by the SDD migration; see [traceability.md](../../traceability.md).
+
 ## Backend
 
 ### Purpose
@@ -81,25 +88,25 @@ None in Phase 1.
 
 ### Invariants
 
-- User, initial workspace, OWNER membership, and registration events commit or roll back together.
-- Passwords use Argon2id; refresh tokens are random, single-use, stored hashed, rotated each use, and family-revoked on replay.
-- Invalid credentials do not reveal whether an email exists. Inactive users cannot authenticate.
-- Auth session validation checks session revocation/expiry in addition to JWT signature and expiry.
-- Login audit records distinguish success/failure without recording the submitted password or token. Events and audit payloads are checked against sensitive-key validation.
-- Cookie attributes are HttpOnly, Secure, SameSite=Lax, and Path `/api/v1/auth`.
-- `/me` GET and PATCH resolve all workspace roles through `WorkspaceAccessService.list_workspaces_for_user`; PATCH never changes workspace membership or emits a token-bearing event.
+- **AUTH-INV-1.** User, initial workspace, OWNER membership, and registration events commit or roll back together.
+- **AUTH-INV-2.** Passwords use Argon2id; refresh tokens are random, single-use, stored hashed, rotated each use, and family-revoked on replay.
+- **AUTH-INV-3.** Invalid credentials do not reveal whether an email exists. Inactive users cannot authenticate.
+- **AUTH-INV-4.** Auth session validation checks session revocation/expiry in addition to JWT signature and expiry.
+- **AUTH-INV-5.** Login audit records distinguish success/failure without recording the submitted password or token. Events and audit payloads are checked against sensitive-key validation.
+- **AUTH-INV-6.** Cookie attributes are HttpOnly, Secure, SameSite=Lax, and Path `/api/v1/auth`.
+- **AUTH-INV-7.** `/me` GET and PATCH resolve all workspace roles through `WorkspaceAccessService.list_workspaces_for_user`; PATCH never changes workspace membership or emits a token-bearing event.
 
 ### Acceptance criteria
-- The existing auth endpoint test `tests/db/test_auth_workspace.py::test_auth_me_patch_updates_display_name_audits_and_returns_workspace_roles` covers normalization, validation, audit behavior, workspace roles, and no sensitive audit details for `PATCH /me`.
+- **AUTH-AC-1.** The existing auth endpoint test `tests/db/test_auth_workspace.py::test_auth_me_patch_updates_display_name_audits_and_returns_workspace_roles` covers normalization, validation, audit behavior, workspace roles, and no sensitive audit details for `PATCH /me`.
 
-- Registration creates exactly one user, workspace, and OWNER membership in a single transaction; failures at each operation leave no partial state or outbox event.
-- Register/login/refresh return `access_token` and `expires_in=900`; access tokens expire after 15 minutes and carry no workspace role. Session revocation invalidates access tokens.
-- A server-side refresh request containing `Cookie: refresh_token=<opaque value>` rotates successfully. Concurrent reuse has no grace window and revokes the family.
-- Refresh rotation succeeds once; replaying an old refresh credential revokes the whole family. Expired, revoked, malformed, and unknown refresh credentials fail without leaking token values.
-- Login throttling is keyed by normalized email and client IP; a throttled attempt returns 429. Wrong email and wrong password produce the same public response.
-- `/me` returns workspace role data through the workspace public interface; PATCH updates and audits `display_name` and returns the same workspace-role shape.
-- Register input validation failures use the shared 422 problem response with `field_errors`; the exact shape and correlation extensions are defined once in the API Contract specification.
-- Tests verify that passwords and tokens are absent from logs, outbox events, and audit details.
+- **AUTH-AC-2.** Registration creates exactly one user, workspace, and OWNER membership in a single transaction; failures at each operation leave no partial state or outbox event.
+- **AUTH-AC-3.** Register/login/refresh return `access_token` and `expires_in=900`; access tokens expire after 15 minutes and carry no workspace role. Session revocation invalidates access tokens.
+- **AUTH-AC-4.** A server-side refresh request containing `Cookie: refresh_token=<opaque value>` rotates successfully. Concurrent reuse has no grace window and revokes the family.
+- **AUTH-AC-5.** Refresh rotation succeeds once; replaying an old refresh credential revokes the whole family. Expired, revoked, malformed, and unknown refresh credentials fail without leaking token values.
+- **AUTH-AC-6.** Login throttling is keyed by normalized email and client IP; a throttled attempt returns 429. Wrong email and wrong password produce the same public response.
+- **AUTH-AC-7.** `/me` returns workspace role data through the workspace public interface; PATCH updates and audits `display_name` and returns the same workspace-role shape.
+- **AUTH-AC-8.** Register input validation failures use the shared 422 problem response with `field_errors`; the exact shape and correlation extensions are defined once in the API Contract specification.
+- **AUTH-AC-9.** Tests verify that passwords and tokens are absent from logs, outbox events, and audit details.
 
 ### Non-goals
 

@@ -1,5 +1,12 @@
 # Workspace Feature Specification
 
+- **Module:** workspace
+- **Phase:** 1 — Core & Tenancy
+- **Specification status:** Not stated (pending owner confirmation)
+- **Revision:** Not stated
+- **Approval status:** Not recorded (pending owner confirmation)
+- **Requirement ID prefix:** `WS` (`WS-INV-n`, `WS-AC-n`). Assigned by the SDD migration; see [traceability.md](../../traceability.md).
+
 ## Backend
 
 ### Purpose
@@ -78,22 +85,22 @@ None in Phase 1.
 
 ### Invariants
 
-- Every active workspace has at least one OWNER. Demotion/removal locks the workspace row before counting/checking owners; concurrent operations cannot both remove the final owner.
-- Ownership transfer is one transaction: new owner becomes OWNER and previous owner becomes ADMIN.
-- Slugs are unique. Soft-deleted workspaces are not exposed as active workspaces.
-- Invitation tokens are random, hashed at rest, expire after seven days, and can be accepted only once. Pending invitations are unique per workspace and normalized email.
-- All workspace changes and corresponding outbox events share a transaction. All auditable actions append through `observability_audit`; audit rows are never updated/deleted by workspace code.
-- No token or password appears in logs, events, audit payloads, or error responses. URL token routes are logged by route template, not raw path.
+- **WS-INV-1.** Every active workspace has at least one OWNER. Demotion/removal locks the workspace row before counting/checking owners; concurrent operations cannot both remove the final owner.
+- **WS-INV-2.** Ownership transfer is one transaction: new owner becomes OWNER and previous owner becomes ADMIN.
+- **WS-INV-3.** Slugs are unique. Soft-deleted workspaces are not exposed as active workspaces.
+- **WS-INV-4.** Invitation tokens are random, hashed at rest, expire after seven days, and can be accepted only once. Pending invitations are unique per workspace and normalized email.
+- **WS-INV-5.** All workspace changes and corresponding outbox events share a transaction. All auditable actions append through `observability_audit`; audit rows are never updated/deleted by workspace code.
+- **WS-INV-6.** No token or password appears in logs, events, audit payloads, or error responses. URL token routes are logged by route template, not raw path.
 
 ### Acceptance criteria
 
-- The complete OWNER/ADMIN/MEMBER permission matrix is covered for every workspace endpoint.
-- The reusable tenant-isolation harness takes registered workspace-scoped routes and asserts a non-member receives 404 on every route. Chunk 1 registers all workspace-scoped routes; later features add route cases to the same registry when adding endpoints.
-- A real Neon TEST-branch concurrency test proves concurrent demotion/removal cannot leave a workspace without an OWNER. Tests and migrations must retain the existing environment guard and never target dev/production.
-- Invitation tests cover create, token preview, matching-email accept, wrong-email rejection, expiry, revocation, and token reuse.
-- The invitation-expiration worker marks stale pending invitations once; repeated execution is idempotent.
-- Workspace events are committed with state changes and sensitive event payload fields are rejected. Audit tests verify append-only use through the public audit interface.
-- Architecture tests reject cross-module internal imports; auth/workspace consumers import only public package exports.
+- **WS-AC-1.** The complete OWNER/ADMIN/MEMBER permission matrix is covered for every workspace endpoint.
+- **WS-AC-2.** The reusable tenant-isolation harness takes registered workspace-scoped routes and asserts a non-member receives 404 on every route. Chunk 1 registers all workspace-scoped routes; later features add route cases to the same registry when adding endpoints.
+- **WS-AC-3.** A real Neon TEST-branch concurrency test proves concurrent demotion/removal cannot leave a workspace without an OWNER. Tests and migrations must retain the existing environment guard and never target dev/production.
+- **WS-AC-4.** Invitation tests cover create, token preview, matching-email accept, wrong-email rejection, expiry, revocation, and token reuse.
+- **WS-AC-5.** The invitation-expiration worker marks stale pending invitations once; repeated execution is idempotent.
+- **WS-AC-6.** Workspace events are committed with state changes and sensitive event payload fields are rejected. Audit tests verify append-only use through the public audit interface.
+- **WS-AC-7.** Architecture tests reject cross-module internal imports; auth/workspace consumers import only public package exports.
 
 ### Non-goals
 

@@ -1,5 +1,12 @@
 # Observability and Audit Module Specification
 
+- **Module:** observability_audit
+- **Phase:** 0 — Foundation
+- **Specification status:** Not stated (pending owner confirmation)
+- **Revision:** Not stated
+- **Approval status:** Not recorded (pending owner confirmation)
+- **Requirement ID prefix:** `OBS` (`OBS-INV-n`, `OBS-AC-n`). Assigned by the SDD migration; see [traceability.md](../../traceability.md).
+
 ## Backend
 
 ### Purpose
@@ -47,15 +54,15 @@ No end-user authentication or policy decisions. Audit reads are not exposed as a
 
 ### Invariants
 
-- Audit record and corresponding state mutation share a transaction when required.
-- Audit rows cannot be modified or deleted by ordinary database roles.
-- Logs carry request correlation, avoid sensitive data, and preserve useful error codes without raw exception secrets.
+- **OBS-INV-1.** Audit record and corresponding state mutation share a transaction when required.
+- **OBS-INV-2.** Audit rows cannot be modified or deleted by ordinary database roles.
+- **OBS-INV-3.** Logs carry request correlation, avoid sensitive data, and preserve useful error codes without raw exception secrets.
 
 ### Acceptance criteria
 
-- DB-free tests prove redaction and structured context propagation.
-- DB tests prove audit insert succeeds and UPDATE/DELETE are rejected by the trigger.
-- Demo output can verify one correlation ID across API, outbox, worker, and audit without displaying credentials.
+- **OBS-AC-1.** DB-free tests prove redaction and structured context propagation.
+- **OBS-AC-2.** DB tests prove audit insert succeeds and UPDATE/DELETE are rejected by the trigger.
+- **OBS-AC-3.** Demo output can verify one correlation ID across API, outbox, worker, and audit without displaying credentials.
 
 ### Non-goals
 

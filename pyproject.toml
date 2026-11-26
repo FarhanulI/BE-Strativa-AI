@@ -7,6 +7,7 @@ dependencies = [
     "alembic>=1.14,<2",
     "asyncpg>=0.30,<1",
     "fastapi>=0.115,<1",
+    "litellm==1.109.1",
     "pgvector>=0.3,<1",
     "pydantic>=2.9,<3",
     "pydantic-settings>=2.5,<3",
@@ -38,7 +39,10 @@ packages = ["app"]
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
-markers = ["db: requires a test database (Neon test branch, or the local Docker database with TEST_DB_MODE=local)"]
+markers = [
+    "db: requires a test database (Neon test branch, or the local Docker database with TEST_DB_MODE=local)",
+    "redis: requires a real Redis at TEST_REDIS_URL (loopback, non-zero database index); skipped when unset unless REQUIRE_REDIS_TESTS=1",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -50,5 +54,5 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["app.core"]
+packages = ["app.core", "app.ai_platform"]
 plugins = ["pydantic.mypy"]

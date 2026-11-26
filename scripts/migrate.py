@@ -10,7 +10,7 @@ from app.core import ConfigurationError, Settings
 from app.db_migrations import (
     validate_migration_target,
     validate_test_database_target,
-    verify_local_test_database,
+    verify_test_database,
 )
 
 parser = argparse.ArgumentParser()
@@ -24,7 +24,7 @@ try:
     if args.require_test:
         validate_test_database_target(settings)
     validate_migration_target(settings, allow_prod=args.allow_prod)
-    verify_local_test_database(settings)
+    verify_test_database(settings)
 except ConfigurationError as error:
     raise SystemExit(str(error)) from None
 config = Config(Path(__file__).resolve().parents[1] / "alembic.ini")

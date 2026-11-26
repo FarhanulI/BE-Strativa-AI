@@ -6,6 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import ConfigurationError, Settings
 from app.db_migrations.engine import build_async_engine
 from tests.helpers.database_setup import prepare_test_schema
+from tests.helpers.redis_setup import (
+    SKIP_REASON,
+    RedisTestScope,
+    RedisTestTargetError,
+    connect,
+    resolve_redis_test_url,
+)
 
 
 @pytest.fixture(scope="session")
@@ -36,3 +43,23 @@ async def db_session(migrated_test_schema: Settings):
                 await transaction.rollback()
     finally:
         await engine.dispose()
+
+
+@pytest.fixture
+async def redis_scope():
+    """A real Redis (T-015): skip when TEST_REDIS_URL is unset, fail when it is wrong or down."""
+    try:
+        url = resolve_redis_test_url()
+        if url is None:
+            pytest.skip(SKIP_REASON)
+        client = await connect(url)
+    except RedisTestTargetError as error:
+        pytest.fail(str(error))
+    scope = RedisTestScope(client)
+    try:
+        yield scope
+    finally:
+        try:
+            await scope.cleanup()
+        finally:
+            await client.aclose()
